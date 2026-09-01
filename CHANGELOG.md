@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The auto-created tmux session can be named.** It was hardcoded to
+  `claude-keep-going-<pid>-<timestamp>`: unique, but opaque — `tmux ls` after a few launches is
+  a wall of timestamps and nothing says which checkout each session belongs to, so
+  re-attaching to a specific run meant guessing. `claude --tmux-session api` names one
+  launch and `CLAUDE_KEEP_GOING_SESSION_NAME` names every launch from a shell; the flag
+  wins over the env var and is consumed by the launcher, so it never reaches `claude`
+  (which would reject it as an unknown option). Unnamed launches are unchanged. `.` and
+  `:` are normalized to `_` up front because tmux rewrites its own target separators as it
+  creates the session — without that the name we hold would stop matching the session tmux
+  made, and the follow-up `-t` targets would miss. A name already in use fails with the
+  `tmux attach` command for the existing session rather than a raw tmux error, and attach
+  now uses an exact-name target (`-t '=api'`) so a name that is a prefix of another
+  session's no longer resolves to the wrong one.
+  Contributed by George Hartt (@nyxaria) in upstream PR #80.
+
 ## [0.8.1] - 2026-10-03
 
 ### Fixed
@@ -245,8 +261,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reporter: 66 sessions holding 16.4 GB after 3 days). The shell fallback is now
   reserved for **non-zero** launcher exits, where the crash scrollback is genuinely
   useful; on a clean exit the pane command ends and tmux reaps the session itself.
-  `CLAUDE_AUTO_RETRY_KEEP_SHELL=1` restores the old behavior.
-- **`CLAUDE_AUTO_RETRY_NO_TMUX=1`** skips tmux session creation entirely, for users
+  `CLAUDE_KEEP_GOING_KEEP_SHELL=1` restores the old behavior.
+- **`CLAUDE_KEEP_GOING_NO_TMUX=1`** skips tmux session creation entirely, for users
   already inside a non-tmux multiplexer (Zellij, screen) who don't want a nested
   session per launch (#69). Explicit opt-out — the nested session is what the monitor
   drives, so this disables auto-retry for the run, and that trade belongs to the user.
@@ -379,7 +395,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2026-07-11
 
 ### Added
-- `CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER` env var: a prefix command prepended to each interactive
+- `CLAUDE_KEEP_GOING_LAUNCH_WRAPPER` env var: a prefix command prepended to each interactive
   session (e.g. `caffeinate -i` to keep macOS awake while Claude works). Generic and opt-in —
   unset spawns `claude` directly, unchanged (#47).
 - **Chrome-aware detection.** Limit/overload/menu detectors now skip trailing UI
