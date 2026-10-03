@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-10-03
+
 ### Added
 - **The badge shows when idle compaction is armed:** `🟢KG 🗜` while its window is open,
   `🟢KG 🗜22:00` before the window opens, and the countdown once one is scheduled.
