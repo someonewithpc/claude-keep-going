@@ -61,6 +61,18 @@ export function cacheExpiresAtMs(snap) {
   return pc.expires_at * 1000;
 }
 
+// Tokens in the current prompt: what the next request (or a compaction) reads.
+export function contextTokens(snap) {
+  const cw = snap?.context_window;
+  const u = cw?.current_usage;
+  if (u && typeof u === 'object') {
+    const n = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']
+      .reduce((sum, k) => sum + (typeof u[k] === 'number' ? u[k] : 0), 0);
+    if (n > 0) return n;
+  }
+  return typeof cw?.total_input_tokens === 'number' ? cw.total_input_tokens : null;
+}
+
 export function contextPercent(snap) {
   const p = snap?.context_window?.used_percentage;
   return typeof p === 'number' ? p : null;

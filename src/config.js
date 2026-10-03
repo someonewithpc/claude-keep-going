@@ -128,6 +128,9 @@ export const DEFAULT_COMPACT = {
   // null: don't check.
   awayMinutes: null,
   minContextPercent: 40,
+  // Also require at least this many tokens in the prompt for the policy trigger. null:
+  // no token threshold.
+  minContextTokens: null,
   // before-expiry: marginSeconds before the statusline's prompt_cache.expires_at, falling
   // back to 4 minutes after the turn when that is unknown. fixed: minutes after the turn.
   settle: { mode: 'before-expiry', marginSeconds: 60, minutes: 4 },
@@ -269,6 +272,7 @@ function validateCompact(raw) {
     ? { start: b.window.start, end: b.window.end } : null;
   b.awayMinutes = typeof b.awayMinutes === 'number' && b.awayMinutes >= 0 ? b.awayMinutes : null;
   b.minContextPercent = clamp(validNumber(b.minContextPercent, 0, d.minContextPercent), 0, 100);
+  b.minContextTokens = typeof b.minContextTokens === 'number' && b.minContextTokens >= 0 ? b.minContextTokens : null;
   const st = { ...d.settle, ...(b.settle && typeof b.settle === 'object' ? b.settle : {}) };
   b.settle = {
     mode: ['before-expiry', 'fixed'].includes(st.mode) ? st.mode : d.settle.mode,

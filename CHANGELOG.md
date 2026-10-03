@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`compact.minContextTokens`** sets the policy trigger's threshold in tokens (the
+  current prompt size from the statusline), alongside or instead of `minContextPercent`.
+
 ## [0.13.2] - 2026-10-03
 
 ### Added

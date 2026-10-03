@@ -111,6 +111,13 @@ describe('compactTick', () => {
     assert.equal(await compactTick(createCompactState(), small, cfg({ trigger: 'policy', minContextPercent: 50 }), NOW), null);
   });
 
+  it('requires minContextTokens when set', async () => {
+    const snap = (n) => ({ ...warm(MIN / 2), context_window: { used_percentage: 15, current_usage: { input_tokens: 2, cache_creation_input_tokens: 100, cache_read_input_tokens: n } } });
+    const c = cfg({ trigger: 'policy', minContextPercent: 0, minContextTokens: 100_000 });
+    assert.equal(await compactTick(createCompactState(), fakeIo({ markers: { stop: settledStop() }, snapshot: snap(150_000) }), c, NOW), 'compact-sent');
+    assert.equal(await compactTick(createCompactState(), fakeIo({ markers: { stop: settledStop() }, snapshot: snap(50_000) }), c, NOW), null);
+  });
+
   it('acts on a last message asking for /compact only when enabled, and once per message', async () => {
     const stop = { ...settledStop(), last: 'The session is at a clean point. Please run /compact now.' };
     const off = fakeIo({ markers: { stop }, snapshot: warm(MIN / 2) });

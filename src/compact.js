@@ -12,7 +12,7 @@
 // input box is empty, so a half-typed prompt is never submitted with /compact glued on.
 
 import { turnState, isSettled } from './markers.js';
-import { cacheExpiresAtMs, contextPercent } from './statusline.js';
+import { cacheExpiresAtMs, contextPercent, contextTokens } from './statusline.js';
 
 const REQUEST_MAX_AGE_MS = 24 * 3600_000;
 const LAST_MESSAGE_PATTERN = /(^|[^\w/])\/compact\b/;
@@ -55,7 +55,10 @@ export function compactTrigger({ config, stop, request, snapshot, lastMatchedMes
   }
   if (c.trigger === 'policy' || c.trigger === 'both') {
     const pct = contextPercent(snapshot);
-    if (pct !== null && pct >= c.minContextPercent) return { kind: 'policy', focus: c.focus, percent: pct };
+    const tokens = contextTokens(snapshot);
+    const pctOk = pct !== null && pct >= c.minContextPercent;
+    const tokensOk = c.minContextTokens === null || (tokens !== null && tokens >= c.minContextTokens);
+    if (pctOk && tokensOk) return { kind: 'policy', focus: c.focus, percent: pct, tokens };
   }
   if (c.matchLastMessage && stop?.last && stop.last !== lastMatchedMessage && LAST_MESSAGE_PATTERN.test(stop.last)) {
     return { kind: 'last-message', focus: c.focus };

@@ -510,6 +510,7 @@ fixed number of minutes after the turn.
 | `window` | `null` | Local-time window, may wrap past midnight. `null` means any time. |
 | `awayMinutes` | `null` | Only when no attached tmux client has had input for this long. No client attached counts as away. |
 | `minContextPercent` | `40` | Threshold for the `policy` trigger. |
+| `minContextTokens` | `null` | Also require this many tokens in the prompt for the `policy` trigger. |
 | `settle.mode` | `"before-expiry"` | `before-expiry` fires `marginSeconds` before the cache expires. `fixed` fires `minutes` after the turn ends: 4 suits the 5-minute cache, 55 the 1-hour one. |
 | `focus` | `""` | Text appended to `/compact`, telling the summary what to keep. |
 | `matchLastMessage` | `false` | Also act when the last message mentions `/compact`, for sessions that ask a person instead of using `request`. |

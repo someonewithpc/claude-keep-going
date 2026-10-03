@@ -1037,7 +1037,7 @@ export async function startMonitor(pane, pid) {
       if (result === 'wrap-up-gave-up') await logger.warn(`Wrap-up notice still unanswered after ${config.nearLimitWrapUp.maxRetries} nudges — the nudge never rendered. Holding until it clears.`);
       if (result.startsWith('compact-')) {
         const cs = state.compact;
-        const why = cs.trigger ? (cs.trigger.kind === 'policy' ? `context at ${cs.trigger.percent}%` : cs.trigger.kind === 'request' ? 'requested by the session' : 'the last message asked for it') : '';
+        const why = cs.trigger ? (cs.trigger.kind === 'policy' ? `context at ${cs.trigger.percent}%${cs.trigger.tokens ? `, ${Math.round(cs.trigger.tokens / 1000)}k tokens` : ''}` : cs.trigger.kind === 'request' ? 'requested by the session' : 'the last message asked for it') : '';
         if (result === 'compact-scheduled') await logger.info(`Idle and settled (${why}). Compacting at ${new Date(cs.fireAt).toLocaleTimeString()}, ${Math.max(0, Math.round((cs.fireAt - Date.now()) / 60_000))} min from now.`);
         if (result === 'compact-sent') await logger.info(`Sent /compact (${why}).`);
         if (result === 'compact-confirmed') await logger.info('Compaction finished.');
