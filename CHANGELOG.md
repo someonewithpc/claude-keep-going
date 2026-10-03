@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Optional gates: a local time window and no tmux input for `awayMinutes`. It skips when
   the cache is already cold, never types into a non-empty input box, and confirms the
   result through the `PostCompact` hook.
+- **The badge counts down to a scheduled compaction** (`🟢KG 🗜3m`), in both
+  `tmux-status.sh` and `status --pane`.
 
 ## [0.10.0] - 2026-10-03
 

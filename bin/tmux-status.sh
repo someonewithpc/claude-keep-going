@@ -88,7 +88,12 @@ case "$status" in
     printf '🛡KG %ds' "$remain"
     ;;
   monitoring)
-    printf '🟢KG'
+    compactAt=$(printf '%s' "$json" | grep -o '"compactAt":[0-9]*' | head -1 | grep -o '[0-9]*')
+    if [ -n "$compactAt" ] && [ "$compactAt" -gt "$now" ]; then
+      printf '🟢KG 🗜%dm' $(( (compactAt - now + 59) / 60 ))
+    else
+      printf '🟢KG'
+    fi
     ;;
   *)
     exit 0

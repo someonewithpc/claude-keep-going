@@ -19,6 +19,8 @@ const CASES = [
   ['gave up', { status: 'waiting', updatedAt: NOW, waitUntil: NOW + 60, gaveUp: true }, '🔴KG'],
   ['stale', { status: 'monitoring', updatedAt: NOW - 31 }, ''],
   ['stale by its own interval', { status: 'monitoring', updatedAt: NOW - 50, pollIntervalSeconds: 30 }, '🟢KG'],
+  ['compaction scheduled', { status: 'monitoring', updatedAt: NOW, compactAt: NOW + 150 }, '🟢KG 🗜3m'],
+  ['compaction time passed', { status: 'monitoring', updatedAt: NOW, compactAt: NOW - 5 }, '🟢KG'],
   ['unknown status', { status: 'interrupted', updatedAt: NOW }, ''],
 ];
 

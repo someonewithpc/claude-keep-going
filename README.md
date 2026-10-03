@@ -656,6 +656,7 @@ It prints:
 | Pane state | Indicator |
 |------------|-----------|
 | Actively monitoring | `🟢KG` |
+| Idle compaction scheduled, 3 minutes left | `🟢KG 🗜3m` |
 | Waiting on a usage-limit reset | `⏳KG 1h30m` |
 | Backing off from overload | `🟠KG 45s` |
 | Retrying past a safeguard/AUP false-positive | `🛡KG 8s` |
