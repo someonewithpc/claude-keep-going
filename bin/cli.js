@@ -642,7 +642,10 @@ async function confirm(question) {
 
 async function runMigration({ yes = false, quiet = false } = {}) {
   const plan = await planMigration();
-  if (plan.steps.length === 0) {
+  // Only the old directory left, and older monitors still using it: nothing would
+  // change, and the reconcile timer runs this every few minutes.
+  const onlyDirKept = plan.steps.length === 1 && plan.steps[0].kind === 'remove-dir' && olderMonitorsRunning();
+  if (plan.steps.length === 0 || (quiet && onlyDirKept)) {
     if (!quiet) console.log('Nothing to migrate.');
     return;
   }

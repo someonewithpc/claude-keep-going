@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`migrate --quiet` no longer logs on every reconcile run** while monitors from an older
+  install keep `~/.claude-auto-retry` alive. It used to print "kept ..." every 5 minutes
+  into the reconcile service's journal.
+
 ## [0.13.0] - 2026-10-03
 
 ### Added
