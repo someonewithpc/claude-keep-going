@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Idle compaction (`compact` config block, off by default).** The monitor sends
+  `/compact` once a session's turn has ended, nothing is running in the background, no
+  wakeup is scheduled and no permission prompt is open. It fires a minute before the
+  prompt cache expires (from the statusline tap), or a fixed number of minutes after the
+  turn. Triggers: the session asked with `claude-keep-going request compact [focus]`, the
+  context passed `minContextPercent`, or (opt-in) the last message mentions `/compact`.
+  Optional gates: a local time window and no tmux input for `awayMinutes`. It skips when
+  the cache is already cold, never types into a non-empty input box, and confirms the
+  result through the `PostCompact` hook.
+
 ## [0.10.0] - 2026-10-03
 
 ### Added

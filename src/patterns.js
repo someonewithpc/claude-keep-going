@@ -792,6 +792,36 @@ export function nearLimitWrapUpMatch(text) {
   return null;
 }
 
+// Whether Claude Code's input box is empty. The box is the prompt glyph line and any
+// continuation lines between the last two horizontal rules, e.g.
+//
+//   ──────────────── session-title ─
+//   ❯\u00a0
+//   ────────────────
+//     /etc/nixos | Opus 5.5 | ...   (statusline, below the box)
+//
+// The top rule can end in the session title, so a rule is any line that starts with a
+// run of box-drawing dashes. Returns false when no box is found, so a caller about to type into the pane holds off
+// rather than guessing.
+const RULE_LINE = /^\s*─{10,}/;
+export function inputBoxEmpty(text) {
+  const lines = stripAnsi(text).split('\n');
+  let bottom = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (RULE_LINE.test(lines[i])) { bottom = i; break; }
+  }
+  if (bottom <= 0) return false;
+  let top = -1;
+  for (let i = bottom - 1; i >= 0; i--) {
+    if (RULE_LINE.test(lines[i])) { top = i; break; }
+  }
+  if (top === -1 || bottom - top < 2) return false;
+  const box = lines.slice(top + 1, bottom);
+  if (!/^\s*[❯>]/.test(box[0])) return false;
+  const content = [box[0].replace(/^\s*[❯>]/, ''), ...box.slice(1)].join('\n');
+  return content.replace(/[\s\u00a0]/g, '') === '';
+}
+
 // Chrome-aware, so isWorking measures the SAME bottom as isRateLimited/detectOverload. A
 // live working footer pushed up by a tall chrome stack below it (task widget + input box
 // + footer) would be invisible to a raw last-N tail while the chrome-aware detectors still

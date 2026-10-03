@@ -72,6 +72,18 @@ export async function sendKeys(pane, text) {
   await execFileAsync('tmux', buildSendEnterArgs(pane));
 }
 
+// Latest input time (epoch seconds) across the clients attached to the pane's session,
+// or null when none is attached. tmux resolves a pane id as the session target.
+export function parseClientActivity(stdout) {
+  const times = String(stdout).split('\n').map((l) => Number(l.trim())).filter((n) => Number.isFinite(n) && n > 0);
+  return times.length ? Math.max(...times) : null;
+}
+
+export async function lastClientActivity(pane) {
+  const { stdout } = await execFileAsync('tmux', ['list-clients', '-t', pane, '-F', '#{client_activity}']);
+  return parseClientActivity(stdout);
+}
+
 export async function getPaneCommand(pane) {
   const { stdout } = await execFileAsync('tmux', buildDisplayArgs(pane, '#{pane_current_command}'));
   return stdout.trim();

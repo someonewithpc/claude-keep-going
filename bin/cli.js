@@ -402,6 +402,25 @@ async function cmdHookDump() {
   process.exit(0);
 }
 
+// Run by the model (through its Bash tool) to ask for something it can't do itself.
+// Inherits the pane from the claude it runs under.
+async function cmdRequest() {
+  const action = process.argv[3];
+  if (action !== 'compact') {
+    console.error('Usage: claude-keep-going request compact [focus text]');
+    process.exit(2);
+  }
+  const pane = paneKeyFromEnv();
+  if (!pane) {
+    console.error('Not running inside a tmux pane, so no monitor can act on this request.');
+    process.exit(1);
+  }
+  const focus = process.argv.slice(4).join(' ').trim();
+  await writeMarker('request', pane, { ts: Date.now(), action: 'compact', focus });
+  console.log('Compaction queued. It runs after this turn ends and background work has finished,');
+  console.log('if idle compaction is enabled in the claude-keep-going config.');
+}
+
 // statusLine wrapper: save the fields the monitor uses, then run the real statusline
 // command (everything after --) with the same input and pass its output through.
 async function cmdStatuslineTap() {
@@ -717,6 +736,7 @@ if (isMain) switch (command) {
   case EVENT_HOOK_MARKER: await cmdEventHook(); break;
   case DUMP_HOOK_MARKER: await cmdHookDump(); break;
   case 'statusline-tap': await cmdStatuslineTap(); break;
+  case 'request': await cmdRequest(); break;
   case 'exclude-self': await cmdExcludeSelf(); break;
   case 'install-timer': await cmdInstallTimer(); break;
   case 'uninstall-timer': await cmdUninstallTimer(); break;
@@ -737,6 +757,9 @@ if (isMain) switch (command) {
     console.log('                                       (default: $CLAUDE_CONFIG_DIR or ~/.claude).');
     console.log('                                       --dump also records raw payloads');
     console.log('  claude-keep-going uninstall-hook [dir]  Remove them (--dump: only the recording)');
+    console.log('  claude-keep-going request compact [focus]');
+    console.log('                                       Ask the monitor to run /compact once this');
+    console.log('                                       session is idle (for the model to run)');
     console.log('  claude-keep-going statusline-tap -- <cmd...>');
     console.log('                                       statusLine wrapper: saves cache, usage and');
     console.log('                                       context numbers for the monitor, then runs');

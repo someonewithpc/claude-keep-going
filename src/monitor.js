@@ -1,7 +1,10 @@
-import { stripAnsi, isRateLimited, findRateLimitMessage, isRateLimitOptionsPrompt, menuStepsToWaitOption, detectOverload, overloadMatch, detectSafeguard, safeguardMatch, detectStreamInterrupted, streamInterruptedMatch, nearLimitWrapUpMatch, isWorking, isInternalRetry, resumedAfterLimit } from './patterns.js';
+import { stripAnsi, isRateLimited, findRateLimitMessage, isRateLimitOptionsPrompt, menuStepsToWaitOption, detectOverload, overloadMatch, detectSafeguard, safeguardMatch, detectStreamInterrupted, streamInterruptedMatch, nearLimitWrapUpMatch, inputBoxEmpty, isWorking, isInternalRetry, resumedAfterLimit } from './patterns.js';
 import { parseResetTime, calculateWaitMs } from './time-parser.js';
-import { capturePane, sendKeys, sendKey, getPaneCommand, isProcessForeground } from './tmux.js';
+import { capturePane, sendKeys, sendKey, getPaneCommand, isProcessForeground, lastClientActivity } from './tmux.js';
 import { loadConfig } from './config.js';
+import { createCompactState, compactTick } from './compact.js';
+import { readMarker, clearMarker } from './markers.js';
+import { readStatuslineSnapshot } from './statusline.js';
 import { PATHS } from './paths.js';
 import { createLogger } from './logger.js';
 import { readStopFailureEvent, clearStopFailureEvent, isRetryableError, isUsageLimitError } from './events.js';
@@ -44,6 +47,7 @@ export function createMonitorState() {
     // Near-limit wrap-up nudge (#78): a hold after each send so the pane can re-render the
     // nudge as a user row (the dedup), and a count of sends against the SAME notice.
     _wrapUpHoldUntil: 0, _wrapUpNudges: 0,
+    compact: createCompactState(),
   };
 }
 
@@ -714,6 +718,26 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
     }
   }
 
+  // Idle compaction (src/compact.js). Needs the hook markers, so it only runs with an
+  // adapter that can read them.
+  if (config.compact && config.compact.enabled && tmuxAdapter.readMarker) {
+    if (!state.compact) state.compact = createCompactState();
+    const result = await compactTick(state.compact, {
+      readMarker: (kind) => tmuxAdapter.readMarker(kind),
+      clearMarker: (kind) => tmuxAdapter.clearMarker(kind),
+      readStatusline: () => (tmuxAdapter.readStatusline ? tmuxAdapter.readStatusline() : null),
+      clientActivity: () => (tmuxAdapter.clientActivity ? tmuxAdapter.clientActivity() : null),
+      isForeground: async () => {
+        const fg = await checkForeground(tmuxAdapter, pane, config);
+        if (!fg.ok) state._lastForeground = fg.fg;
+        return fg.ok;
+      },
+      inputEmpty: async () => inputBoxEmpty(stripped),
+      send: (text) => tmuxAdapter.sendKeys(pane, text),
+    }, config);
+    if (result) return result;
+  }
+
   return 'monitoring';
 }
 
@@ -756,6 +780,10 @@ export async function startMonitor(pane, pid) {
     // marker points at — transcript_path preferred, cwd/session_id as fallback (see
     // src/transcript.js).
     resolveUsageLimitLine: (ev) => readLatestUsageLimitLine(ev),
+    readMarker: (kind) => readMarker(kind, pane),
+    clearMarker: (kind) => clearMarker(kind, pane),
+    readStatusline: () => readStatuslineSnapshot(pane, { maxAgeMs: 6 * 3600_000 }),
+    clientActivity: () => lastClientActivity(pane).catch(() => null),
   };
   const isAlive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
@@ -796,6 +824,8 @@ export async function startMonitor(pane, pid) {
         interruptedAttempts: state.interruptedAttempts,
         pollIntervalSeconds: config.pollIntervalSeconds,
         gaveUp: !!state._gaveUp,
+        compactAt: state.compact && state.compact.fireAt && state.compact.handledStop !== state.compact.idleSince
+          ? Math.floor(state.compact.fireAt / 1000) : 0,
       }).catch(() => {});
       // The three results that announce a new wake-up time share one shape: seconds until
       // waitUntil, then consume the one-shot lastRateLimitMessage. Set-with-clear is an
@@ -855,6 +885,17 @@ export async function startMonitor(pane, pid) {
       if (result === 'interrupted-cleared') await logger.info('Interrupted turn resumed. Back to normal monitoring.');
       if (result === 'wrap-up-nudged') await logger.info(`Near-limit wrap-up notice at an idle prompt ("${state._wrapUpNotice}") — sent "${config.nearLimitWrapUp.retryMessage}" to pick the work back up (${state._wrapUpNudges}/${config.nearLimitWrapUp.maxRetries}).`);
       if (result === 'wrap-up-gave-up') await logger.warn(`Wrap-up notice still unanswered after ${config.nearLimitWrapUp.maxRetries} nudges — the nudge never rendered. Holding until it clears.`);
+      if (result.startsWith('compact-')) {
+        const cs = state.compact;
+        const why = cs.trigger ? (cs.trigger.kind === 'policy' ? `context at ${cs.trigger.percent}%` : cs.trigger.kind === 'request' ? 'requested by the session' : 'the last message asked for it') : '';
+        if (result === 'compact-scheduled') await logger.info(`Idle and settled (${why}). Compacting at ${new Date(cs.fireAt).toLocaleTimeString()}, ${Math.max(0, Math.round((cs.fireAt - Date.now()) / 60_000))} min from now.`);
+        if (result === 'compact-sent') await logger.info(`Sent /compact (${why}).`);
+        if (result === 'compact-confirmed') await logger.info('Compaction finished.');
+        if (result === 'compact-unconfirmed') await logger.warn(`Sent /compact but no PostCompact hook arrived within ${config.compact.confirmMinutes} min.`);
+        if (result === 'compact-skipped-cold') await logger.info('Would compact, but the prompt cache has already expired, so it would cost a full cold read. Skipped.');
+        if (result === 'compact-not-foreground') await logger.warn(`Time to compact, but the foreground is "${state._lastForeground}", not Claude. Waiting.`);
+        if (result === 'compact-input-busy') await logger.info('Time to compact, but the input box has text in it. Waiting until it is empty.');
+      }
       if (result === 'interrupted-gave-up') await logger.warn(`Stream still truncated after ${config.streamInterrupted.maxRetries} resume attempts. Giving up — the connection may still be down after the wake. Will not retry until it clears.`);
     } catch (err) {
       consecutiveErrors++;

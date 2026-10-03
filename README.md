@@ -410,6 +410,70 @@ nothing after `--` it prints nothing.
 `~/.local/state/claude-keep-going/hook-dump.jsonl`. Use it to check what your Claude Code
 version actually sends, then remove it with `uninstall-hook --dump`.
 
+## Idle compaction
+
+Off by default. Claude can't run `/compact` itself, so a long unattended run tends to end
+with a message like "please run /compact now" that nobody reads until morning. By then
+the prompt cache has expired, and the first message re-sends the whole context cold.
+
+With `compact.enabled`, the monitor sends `/compact` itself when all of these hold:
+
+- the last turn ended (`Stop` hook) and no new one started
+- no background agents or tasks are still running, and no scheduled wakeup is pending
+- no permission prompt is open
+- something asked for it (see `trigger` below)
+- the time window and the away check pass, if you set them
+- the prompt cache is still warm
+- Claude is in the foreground and the input box is empty
+
+It needs the hooks from `install-hook`. Timing against the cache needs the
+[statusline tap](#hook-signals-and-the-statusline-tap); without it the monitor waits a
+fixed number of minutes after the turn.
+
+```json
+{
+  "compact": {
+    "enabled": true,
+    "trigger": "both",
+    "window": { "start": "01:00", "end": "07:00" },
+    "awayMinutes": 30,
+    "minContextPercent": 40,
+    "settle": { "mode": "before-expiry", "marginSeconds": 60 },
+    "focus": "",
+    "matchLastMessage": false
+  }
+}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Turn the feature on. |
+| `trigger` | `"request"` | `request`: only when the session asked (below). `policy`: whenever the context is at least `minContextPercent` full. `both`: either. |
+| `window` | `null` | Local-time window, may wrap past midnight. `null` means any time. |
+| `awayMinutes` | `null` | Only when no attached tmux client has had input for this long. No client attached counts as away. |
+| `minContextPercent` | `40` | Threshold for the `policy` trigger. |
+| `settle.mode` | `"before-expiry"` | `before-expiry` fires `marginSeconds` before the cache expires. `fixed` fires `minutes` after the turn ends: 4 suits the 5-minute cache, 55 the 1-hour one. |
+| `focus` | `""` | Text appended to `/compact`, telling the summary what to keep. |
+| `matchLastMessage` | `false` | Also act when the last message mentions `/compact`, for sessions that ask a person instead of using `request`. |
+| `minIntervalMinutes` | `30` | Never compact twice within this long. |
+
+The session asks with a command it can run through its Bash tool:
+
+```bash
+claude-keep-going request compact [what the summary should keep]
+```
+
+A line like this in `CLAUDE.md` tells it to:
+
+```markdown
+When a long task is done and the context is large, run
+`claude-keep-going request compact <what to keep>` instead of asking me to run /compact.
+```
+
+If the cache has already gone cold, the monitor skips the compaction: at that point it
+would cost a full cold read on top of the next message's. Every decision is logged
+("Compacting at 03:41", "Sent /compact", "Compaction finished").
+
 ## Safeguard retry
 
 A third failure mode, separate from usage limits and 5xx overloads: the model's
@@ -642,6 +706,7 @@ claude-keep-going version          # Print version
 claude-keep-going install-hook [dir]    # Install the hooks into a config dir (--dump: also record payloads)
 claude-keep-going uninstall-hook [dir]  # Remove them (--dump: only the recording)
 claude-keep-going statusline-tap -- <cmd...>  # statusLine wrapper, see "Hook signals"
+claude-keep-going request compact [focus]     # For the model: compact once this session is idle
 
 # Monitor coverage (see "Keeping monitors alive")
 claude-keep-going reconcile        # Re-arm a monitor for every live claude pane not covered

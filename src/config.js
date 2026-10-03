@@ -113,6 +113,31 @@ export const DEFAULT_NEAR_LIMIT_WRAP_UP = {
   retryMessage: 'continue',
 };
 
+// Idle compaction: send /compact once a session has finished its work, while the prompt
+// cache is still warm, so the next message doesn't re-send the whole context cold.
+// Off by default. See src/compact.js.
+export const DEFAULT_COMPACT = {
+  enabled: false,
+  // request: only when the model ran `claude-keep-going request compact`.
+  // policy: whenever the context is at least minContextPercent full.
+  // both: either.
+  trigger: 'request',
+  // {start: "01:00", end: "07:00"} in local time, may wrap past midnight. null: any time.
+  window: null,
+  // Only when no tmux client has had input for this many minutes (or none is attached).
+  // null: don't check.
+  awayMinutes: null,
+  minContextPercent: 40,
+  // before-expiry: marginSeconds before the statusline's prompt_cache.expires_at, falling
+  // back to 4 minutes after the turn when that is unknown. fixed: minutes after the turn.
+  settle: { mode: 'before-expiry', marginSeconds: 60, minutes: 4 },
+  focus: '',
+  // Also act when the last message mentions /compact (a model asking a person to run it).
+  matchLastMessage: false,
+  confirmMinutes: 5,
+  minIntervalMinutes: 30,
+};
+
 export const DEFAULT_CONFIG = {
   maxRetries: 5,
   pollIntervalSeconds: 5,
@@ -124,6 +149,7 @@ export const DEFAULT_CONFIG = {
   safeguard: DEFAULT_SAFEGUARD,
   streamInterrupted: DEFAULT_STREAM_INTERRUPTED,
   nearLimitWrapUp: DEFAULT_NEAR_LIMIT_WRAP_UP,
+  compact: DEFAULT_COMPACT,
 };
 
 
@@ -203,6 +229,30 @@ function validateNudge(raw, defaults) {
   return b;
 }
 
+const CLOCK = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+function validateCompact(raw) {
+  const d = DEFAULT_COMPACT;
+  const b = { ...d, ...(raw && typeof raw === 'object' ? raw : {}) };
+  b.enabled = typeof b.enabled === 'boolean' ? b.enabled : d.enabled;
+  b.trigger = ['request', 'policy', 'both'].includes(b.trigger) ? b.trigger : d.trigger;
+  b.window = b.window && typeof b.window === 'object' && CLOCK.test(b.window.start) && CLOCK.test(b.window.end)
+    ? { start: b.window.start, end: b.window.end } : null;
+  b.awayMinutes = typeof b.awayMinutes === 'number' && b.awayMinutes >= 0 ? b.awayMinutes : null;
+  b.minContextPercent = clamp(validNumber(b.minContextPercent, 0, d.minContextPercent), 0, 100);
+  const st = { ...d.settle, ...(b.settle && typeof b.settle === 'object' ? b.settle : {}) };
+  b.settle = {
+    mode: ['before-expiry', 'fixed'].includes(st.mode) ? st.mode : d.settle.mode,
+    marginSeconds: validNumber(st.marginSeconds, 0, d.settle.marginSeconds),
+    minutes: validNumber(st.minutes, 0, d.settle.minutes),
+  };
+  b.focus = typeof b.focus === 'string' ? b.focus : d.focus;
+  b.matchLastMessage = typeof b.matchLastMessage === 'boolean' ? b.matchLastMessage : d.matchLastMessage;
+  b.confirmMinutes = validNumber(b.confirmMinutes, 1, d.confirmMinutes);
+  b.minIntervalMinutes = validNumber(b.minIntervalMinutes, 0, d.minIntervalMinutes);
+  return b;
+}
+
 function validate(cfg) {
   cfg.maxRetries = validNumber(cfg.maxRetries, 1, DEFAULT_CONFIG.maxRetries);
   cfg.pollIntervalSeconds = validNumber(cfg.pollIntervalSeconds, 1, DEFAULT_CONFIG.pollIntervalSeconds);
@@ -228,6 +278,7 @@ function validate(cfg) {
   cfg.safeguard = validateBoundedRetry(cfg.safeguard, DEFAULT_SAFEGUARD);
   cfg.streamInterrupted = validateBoundedRetry(cfg.streamInterrupted, DEFAULT_STREAM_INTERRUPTED);
   cfg.nearLimitWrapUp = validateNudge(cfg.nearLimitWrapUp, DEFAULT_NEAR_LIMIT_WRAP_UP);
+  cfg.compact = validateCompact(cfg.compact);
   return cfg;
 }
 
