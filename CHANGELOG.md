@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-03
+
 ### Added
 - **The auto-created tmux session can be named.** It was hardcoded to
   `claude-keep-going-<pid>-<timestamp>`: unique, but opaque — `tmux ls` after a few launches is
