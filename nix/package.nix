@@ -1,7 +1,7 @@
 { lib, stdenv, nodejs, makeWrapper, tmux, procps }:
 
 stdenv.mkDerivation (finalAttrs: {
-  pname = "claude-auto-retry";
+  pname = "claude-keep-going";
   version = (lib.importJSON ../package.json).version;
 
   src = lib.cleanSourceWith {
@@ -18,9 +18,9 @@ stdenv.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out/lib/claude-auto-retry
-    cp -r bin src systemd launchd LICENSE README.md CHANGELOG.md package.json $out/lib/claude-auto-retry/
-    chmod +x $out/lib/claude-auto-retry/bin/cli.js $out/lib/claude-auto-retry/bin/tmux-status.sh
+    mkdir -p $out/lib/claude-keep-going
+    cp -r bin src systemd launchd LICENSE README.md CHANGELOG.md package.json $out/lib/claude-keep-going/
+    chmod +x $out/lib/claude-keep-going/bin/cli.js $out/lib/claude-keep-going/bin/tmux-status.sh
 
     mkdir -p $out/bin
     # tmux isn't an npm dependency (this tool spawns the `tmux` binary directly via
@@ -34,10 +34,10 @@ stdenv.mkDerivation (finalAttrs: {
     # findutils, gnugrep, gnused, systemd), which has no `ps`, so the reconcile
     # timer failed with "reconcile failed: spawn ps ENOENT" on every interval
     # until this was added. Darwin ships ps in the base system and has no procps.
-    makeWrapper ${nodejs}/bin/node $out/bin/claude-auto-retry \
-      --add-flags "$out/lib/claude-auto-retry/bin/cli.js" \
+    makeWrapper ${nodejs}/bin/node $out/bin/claude-keep-going \
+      --add-flags "$out/lib/claude-keep-going/bin/cli.js" \
       --prefix PATH : ${lib.makeBinPath ([ tmux ] ++ lib.optionals stdenv.hostPlatform.isLinux [ procps ])}
-    ln -s $out/lib/claude-auto-retry/bin/tmux-status.sh $out/bin/claude-auto-retry-tmux-status
+    ln -s $out/lib/claude-keep-going/bin/tmux-status.sh $out/bin/claude-keep-going-tmux-status
 
     runHook postInstall
   '';
@@ -45,15 +45,15 @@ stdenv.mkDerivation (finalAttrs: {
   passthru = {
     # Consumed by the NixOS/home-manager modules to build the shell wrapper
     # and locate the launcher without re-deriving the store layout above.
-    launcherPath = "${finalAttrs.finalPackage}/lib/claude-auto-retry/src/launcher.js";
-    wrapperTemplatePath = "${finalAttrs.finalPackage}/lib/claude-auto-retry/src/wrapper.sh";
+    launcherPath = "${finalAttrs.finalPackage}/lib/claude-keep-going/src/launcher.js";
+    wrapperTemplatePath = "${finalAttrs.finalPackage}/lib/claude-keep-going/src/wrapper.sh";
   };
 
   meta = {
     description = "Automatically retry Claude Code sessions on subscription rate limits and sustained API overload";
-    homepage = "https://github.com/cheapestinference/claude-auto-retry";
+    homepage = "https://github.com/someonewithpc/claude-keep-going";
     license = lib.licenses.mit;
     platforms = lib.platforms.unix;
-    mainProgram = "claude-auto-retry";
+    mainProgram = "claude-keep-going";
   };
 })

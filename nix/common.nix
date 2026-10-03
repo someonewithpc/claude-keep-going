@@ -1,13 +1,13 @@
 { lib, pkgs, config }:
 {
   options = {
-    enable = lib.mkEnableOption "claude-auto-retry (auto-resume Claude Code on subscription rate limits and API overload)";
+    enable = lib.mkEnableOption "claude-keep-going (auto-resume Claude Code on subscription rate limits and API overload)";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./package.nix { };
-      defaultText = lib.literalExpression "pkgs.callPackage <claude-auto-retry>/nix/package.nix { }";
-      description = "The claude-auto-retry package to use.";
+      defaultText = lib.literalExpression "pkgs.callPackage <claude-keep-going>/nix/package.nix { }";
+      description = "The claude-keep-going package to use.";
     };
 
     shellIntegration = {
@@ -41,7 +41,7 @@
         type = lib.types.bool;
         default = true;
         description = ''
-          Run `claude-auto-retry reconcile` on a timer (systemd --user on
+          Run `claude-keep-going reconcile` on a timer (systemd --user on
           Linux, a launchd agent on Darwin), so a monitor that dies (or a
           `claude` started outside the wrapper) gets covered within one
           interval instead of staying unmonitored forever.

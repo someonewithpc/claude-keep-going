@@ -1,5 +1,5 @@
 {
-  description = "claude-auto-retry: auto-resume Claude Code sessions on subscription rate limits and API overload";
+  description = "claude-keep-going: auto-resume Claude Code sessions on subscription rate limits and API overload";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -14,7 +14,7 @@
       {
         packages.default = pkgs.callPackage ./nix/package.nix { };
 
-        checks.default = pkgs.runCommand "claude-auto-retry-test"
+        checks.default = pkgs.runCommand "claude-keep-going-test"
           {
             nativeBuildInputs = [ pkgs.nodejs ];
           } ''
@@ -26,7 +26,7 @@
         '';
       }) // {
       overlays.default = final: prev: {
-        claude-auto-retry = final.callPackage ./nix/package.nix { };
+        claude-keep-going = final.callPackage ./nix/package.nix { };
       };
 
       nixosModules.default = ./nix/nixos-module.nix;

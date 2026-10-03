@@ -1,4 +1,4 @@
-// `claude-auto-retry reconcile` — re-arm a monitor for every live tmux pane running
+// `claude-keep-going reconcile` — re-arm a monitor for every live tmux pane running
 // claude, skipping panes already covered. Closes the persistence gap: monitors are
 // detached processes with no service supervising them, so a crash/kill (or a session
 // launched outside the wrapper) leaves a live claude unmonitored. Reconcile restores
@@ -499,10 +499,10 @@ function armMonitor(pane, pid, socket = null) {
   // Under the timer there is no $TMUX in our env, so a spawned monitor would write its
   // status file under the 'default' socket key while the tmux status-bar reader looks
   // up by #{socket_path} — pass the enumerated server's socket explicitly instead
-  // (status-file.js prefers CLAUDE_AUTO_RETRY_SOCKET over $TMUX).
+  // (status-file.js prefers CLAUDE_KEEP_GOING_SOCKET over $TMUX).
   const child = spawn(process.execPath, [MONITOR_PATH, pane, String(pid)], {
     detached: true, stdio: 'ignore',
-    env: socket ? { ...process.env, CLAUDE_AUTO_RETRY_SOCKET: socket } : process.env,
+    env: socket ? { ...process.env, CLAUDE_KEEP_GOING_SOCKET: socket } : process.env,
   });
   child.unref();
   return child.pid;

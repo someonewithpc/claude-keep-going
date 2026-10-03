@@ -30,7 +30,7 @@ export const STATUS_DIR = join(homedir(), '.claude-auto-retry', 'status');
 // can't rely on its own $TMUX (a status-bar `#()` command runs in the tmux *server's*
 // environment, not a client's — see the README PATH caveat), so it instead receives
 // `#{socket_path}` as an explicit argument, which resolves to the same value.
-// socketIdFromEnv (shared, pane-key.js): CLAUDE_AUTO_RETRY_SOCKET is set by reconcile
+// socketIdFromEnv (shared, pane-key.js): CLAUDE_KEEP_GOING_SOCKET is set by reconcile
 // when it arms a monitor — timer runs have no $TMUX (systemd/launchd jobs run outside
 // any client), and without it every self-healed monitor wrote under 'default', a key
 // the #{socket_path}-driven reader never looks up (permanently blank status segment).
@@ -84,7 +84,7 @@ export async function clearStatus(paneKey, dir = STATUS_DIR) {
 //
 // maxAgeSeconds is intentionally generous (default 5 minutes) — comfortably above any
 // sane pollIntervalSeconds so a live monitor's own file is never swept out from under it.
-// Called best-effort on monitor startup and from `claude-auto-retry uninstall`.
+// Called best-effort on monitor startup and from `claude-keep-going uninstall`.
 export async function sweepStaleStatus(dir = STATUS_DIR, maxAgeSeconds = 300) {
   let entries;
   try {

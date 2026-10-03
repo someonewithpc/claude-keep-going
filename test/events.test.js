@@ -30,13 +30,13 @@ describe('StopFailure event markers', () => {
   let dir, savedTmux, savedSock;
   before(async () => {
     dir = await mkdtemp(join(tmpdir(), 'car-ev-'));
-    savedTmux = process.env.TMUX; savedSock = process.env.CLAUDE_AUTO_RETRY_SOCKET;
-    delete process.env.TMUX; delete process.env.CLAUDE_AUTO_RETRY_SOCKET;
+    savedTmux = process.env.TMUX; savedSock = process.env.CLAUDE_KEEP_GOING_SOCKET;
+    delete process.env.TMUX; delete process.env.CLAUDE_KEEP_GOING_SOCKET;
   });
   after(async () => {
     await rm(dir, { recursive: true, force: true });
     if (savedTmux !== undefined) process.env.TMUX = savedTmux;
-    if (savedSock !== undefined) process.env.CLAUDE_AUTO_RETRY_SOCKET = savedSock;
+    if (savedSock !== undefined) process.env.CLAUDE_KEEP_GOING_SOCKET = savedSock;
   });
 
   it('round-trips a pane-keyed marker', async () => {
@@ -51,7 +51,7 @@ describe('StopFailure event markers', () => {
   it('sanitizes the pane id into the filename, prefixed by a socket key', async () => {
     await writeStopFailureEvent('%7', { error: 'server_error' }, dir);
     const files = await readdir(dir);
-    // No TMUX/CLAUDE_AUTO_RETRY_SOCKET in this suite (see before hook) → 'default'.
+    // No TMUX/CLAUDE_KEEP_GOING_SOCKET in this suite (see before hook) → 'default'.
     assert.ok(files.includes('default__7.json'), files.join(','));
   });
 

@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- claude-auto-retry: re-arm monitors for all live claude tmux panes (macOS
+<!-- claude-keep-going: re-arm monitors for all live claude tmux panes (macOS
      counterpart of the systemd user units; installed by `install-timer`).
      __NODE_PATH__ and __CLI_PATH__ are substituted (XML-escaped) at install time. -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.claude-auto-retry.reconcile</string>
+    <string>com.claude-keep-going.reconcile</string>
     <key>ProgramArguments</key>
     <array>
         <string>__NODE_PATH__</string>

@@ -20,21 +20,21 @@ describe('resolveLaunchCommand', () => {
 
   it('treats an empty/whitespace wrapper as unset', () => {
     assert.deepEqual(
-      resolveLaunchCommand('claude', ['-c'], { CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER: '   ' }),
+      resolveLaunchCommand('claude', ['-c'], { CLAUDE_KEEP_GOING_LAUNCH_WRAPPER: '   ' }),
       { cmd: 'claude', cmdArgs: ['-c'] },
     );
   });
 
   it('prepends a wrapper command (e.g. caffeinate -i) before claude and its args', () => {
     assert.deepEqual(
-      resolveLaunchCommand('/usr/bin/claude', ['--resume'], { CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER: 'caffeinate -i' }),
+      resolveLaunchCommand('/usr/bin/claude', ['--resume'], { CLAUDE_KEEP_GOING_LAUNCH_WRAPPER: 'caffeinate -i' }),
       { cmd: 'caffeinate', cmdArgs: ['-i', '/usr/bin/claude', '--resume'] },
     );
   });
 
   it('handles a bare single-token wrapper and extra whitespace', () => {
     assert.deepEqual(
-      resolveLaunchCommand('claude', [], { CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER: '  nice   ' }),
+      resolveLaunchCommand('claude', [], { CLAUDE_KEEP_GOING_LAUNCH_WRAPPER: '  nice   ' }),
       { cmd: 'nice', cmdArgs: ['claude'] },
     );
   });
@@ -96,38 +96,38 @@ describe('env snapshot file (#68)', () => {
   });
 
   it('applyEnvSnapshot overwrites stale pane values but never TMUX*, TERM, or the pointer var', () => {
-    const target = { PATH: '/stale/path', TMUX_PANE: '%7', TERM: 'tmux-direct', CLAUDE_AUTO_RETRY_ENV_FILE: '/x' };
+    const target = { PATH: '/stale/path', TMUX_PANE: '%7', TERM: 'tmux-direct', CLAUDE_KEEP_GOING_ENV_FILE: '/x' };
     applyEnvSnapshot(target, {
       PATH: '/usr/bin', NEW_VAR: '1',
-      TMUX_PANE: '%5', TMUX: 'evil', TERM: 'xterm-ghostty', CLAUDE_AUTO_RETRY_ENV_FILE: '/evil',
+      TMUX_PANE: '%5', TMUX: 'evil', TERM: 'xterm-ghostty', CLAUDE_KEEP_GOING_ENV_FILE: '/evil',
     });
     assert.equal(target.PATH, '/usr/bin');
     assert.equal(target.NEW_VAR, '1');
     assert.equal(target.TMUX_PANE, '%7', 'the pane identity belongs to the inner session');
     assert.ok(!('TMUX' in target));
     assert.equal(target.TERM, 'tmux-direct', 'tmux assigns TERM per-pane from default-terminal; the outer shell must not override it');
-    assert.equal(target.CLAUDE_AUTO_RETRY_ENV_FILE, '/x');
+    assert.equal(target.CLAUDE_KEEP_GOING_ENV_FILE, '/x');
   });
 
   it('consumeEnvSnapshot applies, unlinks, and clears the pointer', () => {
     const dir = scratch();
     const path = writeEnvSnapshot({ SECRET: 's3cr3t' }, dir);
-    const env = { CLAUDE_AUTO_RETRY_ENV_FILE: path, TMUX_PANE: '%2' };
+    const env = { CLAUDE_KEEP_GOING_ENV_FILE: path, TMUX_PANE: '%2' };
     assert.equal(consumeEnvSnapshot(env), true);
     assert.equal(env.SECRET, 's3cr3t');
-    assert.ok(!('CLAUDE_AUTO_RETRY_ENV_FILE' in env));
+    assert.ok(!('CLAUDE_KEEP_GOING_ENV_FILE' in env));
     assert.ok(!existsSync(path), 'snapshot must be unlinked after consumption');
   });
 
   it('consumeEnvSnapshot degrades on a missing or corrupt file (still clears pointer/unlinks)', () => {
-    const env = { CLAUDE_AUTO_RETRY_ENV_FILE: '/nonexistent/env.json' };
+    const env = { CLAUDE_KEEP_GOING_ENV_FILE: '/nonexistent/env.json' };
     assert.equal(consumeEnvSnapshot(env), false);
-    assert.ok(!('CLAUDE_AUTO_RETRY_ENV_FILE' in env));
+    assert.ok(!('CLAUDE_KEEP_GOING_ENV_FILE' in env));
 
     const dir = scratch();
     const bad = join(dir, 'env-bad.json');
     writeFileSync(bad, 'not json', { mode: 0o600 });
-    const env2 = { CLAUDE_AUTO_RETRY_ENV_FILE: bad };
+    const env2 = { CLAUDE_KEEP_GOING_ENV_FILE: bad };
     assert.equal(consumeEnvSnapshot(env2), false);
     assert.ok(!existsSync(bad), 'even a corrupt snapshot must not linger on disk');
     assert.equal(consumeEnvSnapshot({}), false, 'no pointer → no-op');
@@ -235,7 +235,7 @@ describe('buildTmuxInnerCmd', () => {
   it('carries only the snapshot PATH on the command line, plus node via execPath', () => {
     const cmd = buildTmuxInnerCmd('/path/launcher.js', ['--resume'],
       { SHELL: '/bin/zsh', ANTHROPIC_API_KEY: 'sk-ant-1' }, '/run/user/1000/env-1.json');
-    assert.ok(cmd.includes("CLAUDE_AUTO_RETRY_ENV_FILE='/run/user/1000/env-1.json'"));
+    assert.ok(cmd.includes("CLAUDE_KEEP_GOING_ENV_FILE='/run/user/1000/env-1.json'"));
     assert.ok(!cmd.includes('sk-ant-1'), 'no env VALUES on the argv');
     assert.ok(cmd.includes(`'${process.execPath}'`),
       'bare `node` resolves against a possibly-stale server PATH; use the launching node');
@@ -244,7 +244,7 @@ describe('buildTmuxInnerCmd', () => {
 
   it('omits the pointer when no snapshot could be written', () => {
     const cmd = buildTmuxInnerCmd('/path/launcher.js', [], { SHELL: '/bin/zsh' }, null);
-    assert.ok(!cmd.includes('CLAUDE_AUTO_RETRY_ENV_FILE'));
+    assert.ok(!cmd.includes('CLAUDE_KEEP_GOING_ENV_FILE'));
   });
 
   // --- Session reap (#69) ---
@@ -253,7 +253,7 @@ describe('buildTmuxInnerCmd', () => {
   // (and its whole Claude/MCP process tree) until reboot — measured at 66 sessions/16.4 GB
   // in 3 days. The tail is now conditional: keep the shell only when the launcher exited
   // non-zero (crash — scrollback genuinely helps), otherwise let the pane command end so
-  // tmux reaps the session itself. CLAUDE_AUTO_RETRY_KEEP_SHELL=1 restores the old tail.
+  // tmux reaps the session itself. CLAUDE_KEEP_GOING_KEEP_SHELL=1 restores the old tail.
   function runInnerTail(exitCode, env) {
     const dir = mkdtempSync(join(tmpdir(), 'car-tail-'));
     const stubLauncher = join(dir, 'launcher.js');
@@ -282,8 +282,8 @@ describe('buildTmuxInnerCmd', () => {
     assert.equal(shellRan, true, 'crash must keep the pane for its scrollback');
   });
 
-  it('CLAUDE_AUTO_RETRY_KEEP_SHELL=1 restores the always-keep-shell tail', () => {
-    const { shellRan } = runInnerTail(0, { CLAUDE_AUTO_RETRY_KEEP_SHELL: '1' });
+  it('CLAUDE_KEEP_GOING_KEEP_SHELL=1 restores the always-keep-shell tail', () => {
+    const { shellRan } = runInnerTail(0, { CLAUDE_KEEP_GOING_KEEP_SHELL: '1' });
     assert.equal(shellRan, true);
   });
 
@@ -304,7 +304,7 @@ describe('chooseLaunchMode (#69 escape hatch)', () => {
   it('outside tmux creates a session by default', () => {
     assert.equal(chooseLaunchMode([], {}), 'tmux-session');
   });
-  it('CLAUDE_AUTO_RETRY_NO_TMUX=1 skips session creation (Zellij/screen users opting out)', () => {
-    assert.equal(chooseLaunchMode([], { CLAUDE_AUTO_RETRY_NO_TMUX: '1' }), 'interactive');
+  it('CLAUDE_KEEP_GOING_NO_TMUX=1 skips session creation (Zellij/screen users opting out)', () => {
+    assert.equal(chooseLaunchMode([], { CLAUDE_KEEP_GOING_NO_TMUX: '1' }), 'interactive');
   });
 });

@@ -1,6 +1,6 @@
 { config, lib, pkgs, ... }:
 let
-  cfg = config.programs.claude-auto-retry;
+  cfg = config.programs.claude-keep-going;
   common = import ./common.nix { inherit lib pkgs config; };
 
   # launchd jobs don't inherit the login shell's PATH, so `spawn tmux` in
@@ -12,7 +12,7 @@ let
   darwinAgentPath = lib.makeBinPath [ cfg.package pkgs.tmux ] + ":/usr/bin:/bin";
 in
 {
-  options.programs.claude-auto-retry = common.options;
+  options.programs.claude-keep-going = common.options;
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
@@ -29,17 +29,17 @@ in
       # changed, so install-hook belongs here instead of on the reconcile
       # timer, which would otherwise re-run it (and rewrite settings.json)
       # every `reconcileTimer.interval` for no reason between switches.
-      home.activation.claudeAutoRetryInstallHook = lib.mkIf cfg.installHook (
+      home.activation.claudeKeepGoingInstallHook = lib.mkIf cfg.installHook (
         lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          run ${cfg.package}/bin/claude-auto-retry install-hook
+          run ${cfg.package}/bin/claude-keep-going install-hook
         ''
       );
     }
 
     (lib.mkIf (cfg.reconcileTimer.enable && pkgs.stdenv.hostPlatform.isLinux) {
-      systemd.user.services.claude-auto-retry-reconcile = {
+      systemd.user.services.claude-keep-going-reconcile = {
         Unit = {
-          Description = "claude-auto-retry: re-arm monitors for all live claude tmux panes";
+          Description = "claude-keep-going: re-arm monitors for all live claude tmux panes";
           After = [ "graphical-session.target" ];
         };
         Service = {
@@ -47,12 +47,12 @@ in
           # reconcile spawns detached monitor processes and exits; the default
           # KillMode=control-group would kill them along with it.
           KillMode = "process";
-          ExecStart = "${cfg.package}/bin/claude-auto-retry reconcile";
+          ExecStart = "${cfg.package}/bin/claude-keep-going reconcile";
         };
       };
 
-      systemd.user.timers.claude-auto-retry-reconcile = {
-        Unit.Description = "Periodically reconcile claude-auto-retry monitors (self-healing coverage)";
+      systemd.user.timers.claude-keep-going-reconcile = {
+        Unit.Description = "Periodically reconcile claude-keep-going monitors (self-healing coverage)";
         Timer = {
           OnStartupSec = cfg.reconcileTimer.startupDelay;
           OnUnitActiveSec = cfg.reconcileTimer.interval;
@@ -62,10 +62,10 @@ in
     })
 
     (lib.mkIf (cfg.reconcileTimer.enable && pkgs.stdenv.hostPlatform.isDarwin) {
-      launchd.agents.claude-auto-retry-reconcile = {
+      launchd.agents.claude-keep-going-reconcile = {
         enable = true;
         config = {
-          ProgramArguments = [ "${cfg.package}/bin/claude-auto-retry" "reconcile" ];
+          ProgramArguments = [ "${cfg.package}/bin/claude-keep-going" "reconcile" ];
           AbandonProcessGroup = true;
           RunAtLoad = true;
           StartInterval = 300;

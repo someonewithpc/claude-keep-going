@@ -1,6 +1,6 @@
 [Unit]
-Description=claude-auto-retry: re-arm monitors for all live claude tmux panes
-Documentation=https://github.com/cheapestinference/claude-auto-retry
+Description=claude-keep-going: re-arm monitors for all live claude tmux panes
+Documentation=https://github.com/someonewithpc/claude-keep-going
 # Only meaningful once a graphical/user session (and thus the tmux server) exists.
 After=graphical-session.target
 
@@ -11,7 +11,7 @@ Type=oneshot
 # finishes (they share the unit's cgroup). KillMode=process kills only the main
 # reconcile process, leaving the freshly-armed monitors running.
 KillMode=process
-# __NODE_PATH__ and __CLI_PATH__ are substituted by `claude-auto-retry install-timer`.
+# __NODE_PATH__ and __CLI_PATH__ are substituted by `claude-keep-going install-timer`.
 # Quoted so a path containing spaces (e.g. an nvm dir under "/home/My User/") survives.
 ExecStart="__NODE_PATH__" "__CLI_PATH__" reconcile
 # tmux is reached via its default socket (/tmp/tmux-<uid>/default); no $TMUX needed.

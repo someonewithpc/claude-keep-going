@@ -26,12 +26,12 @@ function isPrintMode(args) {
   return args.includes('-p') || args.includes('--print');
 }
 
-// Optional launch wrapper. Set CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER to a prefix command
+// Optional launch wrapper. Set CLAUDE_KEEP_GOING_LAUNCH_WRAPPER to a prefix command
 // (e.g. "caffeinate -i" on macOS to keep the machine awake, or "nice", "chrt …") and it is
 // prepended to the claude invocation: `<wrapper> <claudeBin> <args…>`. Generic — not tied to
 // any one OS; unset/blank spawns claude directly (unchanged default). (#47)
 export function resolveLaunchCommand(claudeBin, args, env = process.env) {
-  const wrapper = (env.CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER || '').trim();
+  const wrapper = (env.CLAUDE_KEEP_GOING_LAUNCH_WRAPPER || '').trim();
   if (!wrapper) return { cmd: claudeBin, cmdArgs: args };
   const toks = wrapper.split(/\s+/);
   return { cmd: toks[0], cmdArgs: [...toks.slice(1), claudeBin, ...args] };
@@ -62,7 +62,7 @@ export function writeEnvSnapshot(env = process.env, dir = ENV_SNAPSHOT_DIR) {
   for (const [k, v] of Object.entries(env)) {
     if (v == null) continue;
     if (k.startsWith('TMUX')) continue;
-    if (k === 'CLAUDE_AUTO_RETRY_ENV_FILE') continue;
+    if (k === 'CLAUDE_KEEP_GOING_ENV_FILE') continue;
     snap[k] = v;
   }
   const path = join(dir, `env-${process.pid}-${randomBytes(6).toString('hex')}.json`);
@@ -78,7 +78,7 @@ export function writeEnvSnapshotSafe(env = process.env, dir = ENV_SNAPSHOT_DIR,
   warn = (msg) => process.stderr.write(msg)) {
   try { return writeEnvSnapshot(env, dir); }
   catch (err) {
-    warn(`[claude-auto-retry] Warning: could not write env snapshot (${err.message}); `
+    warn(`[claude-keep-going] Warning: could not write env snapshot (${err.message}); `
       + 'the pane will run with the tmux server\'s environment, which may be stale or incomplete.\n');
     return null;
   }
@@ -87,7 +87,7 @@ export function writeEnvSnapshotSafe(env = process.env, dir = ENV_SNAPSHOT_DIR,
 export function applyEnvSnapshot(target, snap) {
   for (const [k, v] of Object.entries(snap)) {
     if (k.startsWith('TMUX')) continue;              // pane identity belongs to the inner session
-    if (k === 'CLAUDE_AUTO_RETRY_ENV_FILE') continue;
+    if (k === 'CLAUDE_KEEP_GOING_ENV_FILE') continue;
     // TERM is pane identity too: tmux assigns it per-pane from default-terminal (e.g. a
     // user opting into "tmux-direct" for truecolor). Reapplying the outer shell's TERM
     // here silently overwrites that choice right after tmux made it.
@@ -100,9 +100,9 @@ export function applyEnvSnapshot(target, snap) {
 // disk and from the env unconditionally — a corrupt snapshot must degrade to the pane's
 // own (server) environment, never linger on disk or leak the pointer to claude's children.
 export function consumeEnvSnapshot(env = process.env) {
-  const path = env.CLAUDE_AUTO_RETRY_ENV_FILE;
+  const path = env.CLAUDE_KEEP_GOING_ENV_FILE;
   if (!path) return false;
-  delete env.CLAUDE_AUTO_RETRY_ENV_FILE;
+  delete env.CLAUDE_KEEP_GOING_ENV_FILE;
   let applied = false;
   try {
     applyEnvSnapshot(env, JSON.parse(readFileSync(path, 'utf-8')));
@@ -126,13 +126,13 @@ export function sweepStaleEnvSnapshots(dir = ENV_SNAPSHOT_DIR, maxAgeMs = 24 * 3
   } catch { /* dir absent */ }
 }
 
-// After the tmux session's own claude-auto-retry process exits, keep the pane ONLY when
+// After the tmux session's own claude-keep-going process exits, keep the pane ONLY when
 // something went wrong: a non-zero launcher exit falls through to the user's login shell
 // so the crash scrollback survives, while a clean exit lets the pane command end — tmux
 // then reaps the session itself. The old unconditional `; exec $SHELL` tail meant NOTHING
 // ever destroyed a session (nothing in the package calls kill-session), leaking every
 // session for the host's uptime (#69: 66 sessions / 16.4 GB in 3 days).
-// CLAUDE_AUTO_RETRY_KEEP_SHELL=1 restores the old always-keep tail. The user's actual
+// CLAUDE_KEEP_GOING_KEEP_SHELL=1 restores the old always-keep tail. The user's actual
 // login shell (env.SHELL) is used rather than hardcoded bash — tmux's default-shell is
 // bypassed for panes started with an explicit command.
 // `node` is spelled as the launching process.execPath: with no env forwarded via tmux, a
@@ -141,9 +141,9 @@ export function buildTmuxInnerCmd(launcherPath, args, env = process.env, envFile
   const escapedLauncher = shellEscape(launcherPath);
   const escapedArgs = args.map(a => shellEscape(a)).join(' ');
   const shell = env.SHELL || 'bash';
-  const envPtr = envFilePath ? `CLAUDE_AUTO_RETRY_ENV_FILE=${shellEscape(envFilePath)} ` : '';
-  const launch = `${envPtr}CLAUDE_AUTO_RETRY_ACTIVE=1 ${shellEscape(process.execPath)} ${escapedLauncher} ${escapedArgs}`;
-  if (env.CLAUDE_AUTO_RETRY_KEEP_SHELL) {
+  const envPtr = envFilePath ? `CLAUDE_KEEP_GOING_ENV_FILE=${shellEscape(envFilePath)} ` : '';
+  const launch = `${envPtr}CLAUDE_KEEP_GOING_ACTIVE=1 ${shellEscape(process.execPath)} ${escapedLauncher} ${escapedArgs}`;
+  if (env.CLAUDE_KEEP_GOING_KEEP_SHELL) {
     return `${launch}; exec ${shellEscape(shell)}`;
   }
   return `${launch}; rc=$?; [ "$rc" -ne 0 ] && exec ${shellEscape(shell)}; exit "$rc"`;
@@ -153,18 +153,18 @@ async function launchInteractive(args) {
   const claudeBin = findClaudeBinary();
   const pane = getCurrentPane();
 
-  // CLAUDE_AUTO_RETRY_PANE is inherited by claude's child processes — notably the
+  // CLAUDE_KEEP_GOING_PANE is inherited by claude's child processes — notably the
   // StopFailure hook, which writes a pane-keyed event marker the monitor consumes.
   const { cmd, cmdArgs } = resolveLaunchCommand(claudeBin, args);
   const claude = spawn(cmd, cmdArgs, {
     stdio: 'inherit',
-    env: { ...process.env, CLAUDE_AUTO_RETRY_ACTIVE: '1', ...(pane ? { CLAUDE_AUTO_RETRY_PANE: pane } : {}) },
+    env: { ...process.env, CLAUDE_KEEP_GOING_ACTIVE: '1', ...(pane ? { CLAUDE_KEEP_GOING_PANE: pane } : {}) },
   });
 
   // Check spawn succeeded before using PID
   if (claude.pid == null) {
     claude.on('error', (err) => {
-      process.stderr.write(`[claude-auto-retry] Failed to start claude: ${err.message}\n`);
+      process.stderr.write(`[claude-keep-going] Failed to start claude: ${err.message}\n`);
     });
     return new Promise((resolve) => {
       claude.on('exit', (code) => resolve(code ?? 1));
@@ -210,7 +210,7 @@ export function readStdinWithGrace(stream, graceMs) {
     const timer = setTimeout(() => {
       if (!received) {
         stream.pause();
-        process.stderr.write('[claude-auto-retry] no stdin data received in 3s, proceeding without it\n');
+        process.stderr.write('[claude-keep-going] no stdin data received in 3s, proceeding without it\n');
         resolve(Buffer.alloc(0));
       }
     }, graceMs);
@@ -245,7 +245,7 @@ async function launchPrintMode(args) {
       const errChunks = [];
       const claude = spawn(claudeBin, args, {
         stdio: [stdinBuf ? 'pipe' : 'inherit', 'pipe', 'pipe'],
-        env: { ...process.env, CLAUDE_AUTO_RETRY_ACTIVE: '1' },
+        env: { ...process.env, CLAUDE_KEEP_GOING_ACTIVE: '1' },
       });
       if (stdinBuf) {
         claude.stdin.on('error', () => {});   // EPIPE if claude exits without reading
@@ -278,14 +278,14 @@ async function launchPrintMode(args) {
     // Rate limited — discard buffer, wait and retry
     retries++;
     if (retries > config.maxRetries) {
-      process.stderr.write(`[claude-auto-retry] Max retries (${config.maxRetries}) reached.\n`);
+      process.stderr.write(`[claude-keep-going] Max retries (${config.maxRetries}) reached.\n`);
       return 1;
     }
 
     const parsed = parseResetTime(combined);
     const waitMs = calculateWaitMs(parsed, config.marginSeconds, config.fallbackWaitHours);
 
-    process.stderr.write(`[claude-auto-retry] Rate limited. Waiting ${Math.round(waitMs / 1000)}s before retry ${retries}/${config.maxRetries}...\n`);
+    process.stderr.write(`[claude-keep-going] Rate limited. Waiting ${Math.round(waitMs / 1000)}s before retry ${retries}/${config.maxRetries}...\n`);
     await new Promise((r) => setTimeout(r, waitMs));
   }
 }
@@ -328,7 +328,7 @@ export async function retryTransientServerError(fn, {
 }
 
 async function createTmuxSession(args) {
-  const sessionName = `claude-retry-${process.pid}-${Date.now()}`;
+  const sessionName = `claude-keep-going-${process.pid}-${Date.now()}`;
   const launcherPath = __filename;
 
   sweepStaleEnvSnapshots();
@@ -365,19 +365,19 @@ async function createTmuxSession(args) {
     // The inner launcher never ran, so nothing will consume the snapshot — remove it now
     // rather than leaving a secrets file for the 24h sweep.
     if (envFile) { try { unlinkSync(envFile); } catch { /* already gone */ } }
-    process.stderr.write(`[claude-auto-retry] Failed to create tmux session: ${err.message}\n`);
+    process.stderr.write(`[claude-keep-going] Failed to create tmux session: ${err.message}\n`);
     return 1;
   }
 }
 
-// CLAUDE_AUTO_RETRY_NO_TMUX=1 skips tmux session creation for users already inside a
+// CLAUDE_KEEP_GOING_NO_TMUX=1 skips tmux session creation for users already inside a
 // non-tmux multiplexer (Zellij, screen): without it every launch minted a fresh nested
 // tmux session (#69). Explicit opt-out rather than auto-detection — the nested session
 // is what the monitor drives, so skipping it trades auto-retry away, and that trade is
 // the user's to make.
 export function chooseLaunchMode(args, env = process.env) {
   if (isPrintMode(args)) return 'print';
-  if (env.TMUX || env.CLAUDE_AUTO_RETRY_NO_TMUX) return 'interactive';
+  if (env.TMUX || env.CLAUDE_KEEP_GOING_NO_TMUX) return 'interactive';
   return 'tmux-session';
 }
 

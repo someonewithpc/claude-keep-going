@@ -16,8 +16,8 @@ const SRC_DIR = join(__dirname, '..', 'src');
 const LAUNCHER_PATH = join(SRC_DIR, 'launcher.js');
 const WRAPPER_TEMPLATE = join(SRC_DIR, 'wrapper.sh');
 
-export const MARKER_START = '# >>> claude-auto-retry >>>';
-export const MARKER_END = '# <<< claude-auto-retry <<<';
+export const MARKER_START = '# >>> claude-keep-going >>>';
+export const MARKER_END = '# <<< claude-keep-going <<<';
 
 // --- Wrapper injection ---
 
@@ -122,7 +122,7 @@ function checkTmux() {
 // --- CLI commands ---
 
 async function cmdInstall() {
-  console.log('claude-auto-retry: installing...\n');
+  console.log('claude-keep-going: installing...\n');
 
   if (!checkTmux()) {
     console.log('tmux not found or too old. Attempting install...');
@@ -135,7 +135,7 @@ async function cmdInstall() {
   if (shell.includes('fish')) {
     console.error('\nFish shell detected. Automatic install not supported.');
     console.error(`Add manually to ~/.config/fish/config.fish:`);
-    console.error(`  function claude; set -x CLAUDE_AUTO_RETRY_ACTIVE 1; node "${LAUNCHER_PATH}" $argv; set -e CLAUDE_AUTO_RETRY_ACTIVE; end`);
+    console.error(`  function claude; set -x CLAUDE_KEEP_GOING_ACTIVE 1; node "${LAUNCHER_PATH}" $argv; set -e CLAUDE_KEEP_GOING_ACTIVE; end`);
     process.exit(1);
   }
 
@@ -155,7 +155,7 @@ async function cmdInstall() {
   console.log(`\nInstalled! Launcher path: ${LAUNCHER_PATH}`);
   console.log('\nRestart your shell or run:');
   for (const rc of rcFiles) { console.log(`  source ${rc}`); }
-  console.log('\nNote: If you switch Node versions (nvm), re-run: claude-auto-retry install');
+  console.log('\nNote: If you switch Node versions (nvm), re-run: claude-keep-going install');
 }
 
 async function cmdUninstall() {
@@ -228,7 +228,7 @@ async function cmdStopFailureHook() {
     const chunks = [];
     for await (const c of process.stdin) chunks.push(c);
     const payload = JSON.parse(Buffer.concat(chunks).toString() || '{}');
-    const pane = process.env.CLAUDE_AUTO_RETRY_PANE;
+    const pane = process.env.CLAUDE_KEEP_GOING_PANE;
     if (pane && isRetryableError(payload.error)) {
       await writeStopFailureEvent(pane, payload);
     }
@@ -271,11 +271,11 @@ async function cmdUninstallHook() {
 // (run shortly after login, then every 5 min), same reconcile entry point.
 
 const SYSTEMD_DIR = join(SRC_DIR, '..', 'systemd');
-const UNIT_SERVICE = 'claude-auto-retry-reconcile.service';
-const UNIT_TIMER = 'claude-auto-retry-reconcile.timer';
+const UNIT_SERVICE = 'claude-keep-going-reconcile.service';
+const UNIT_TIMER = 'claude-keep-going-reconcile.timer';
 
 const LAUNCHD_DIR = join(SRC_DIR, '..', 'launchd');
-const LAUNCHD_LABEL = 'com.claude-auto-retry.reconcile';
+const LAUNCHD_LABEL = 'com.claude-keep-going.reconcile';
 const LAUNCHD_PLIST = `${LAUNCHD_LABEL}.plist`;
 
 function userUnitDir() {
@@ -342,7 +342,7 @@ async function installTimerLaunchd() {
   console.log(`  note: LaunchAgents run only while you are logged in (fine for tmux —`);
   console.log(`        the tmux server lives in your login session too).`);
   console.log(`\nNote: the agent pins this Node path (${nodePath}). If you switch Node`);
-  console.log(`versions (nvm), re-run: claude-auto-retry install-timer`);
+  console.log(`versions (nvm), re-run: claude-keep-going install-timer`);
 }
 
 async function uninstallTimerLaunchd() {
@@ -389,7 +389,7 @@ async function cmdInstallTimer() {
   console.log(`  tip: for the timer to run while logged out, enable lingering once:`);
   console.log(`       loginctl enable-linger $USER`);
   console.log(`\nNote: the unit pins this Node path (${nodePath}). If you switch Node`);
-  console.log(`versions (nvm), re-run: claude-auto-retry install-timer`);
+  console.log(`versions (nvm), re-run: claude-keep-going install-timer`);
 }
 
 async function cmdUninstallTimer() {
@@ -478,25 +478,25 @@ switch (command) {
   case 'logs': await cmdLogs(); break;
   case 'version': case '--version': case '-v': await cmdVersion(); break;
   default:
-    console.log('claude-auto-retry - Auto-retry Claude Code on subscription rate limits\n');
+    console.log('claude-keep-going - Auto-retry Claude Code on subscription rate limits\n');
     console.log('Usage:');
-    console.log('  claude-auto-retry install            Install shell wrapper + tmux');
-    console.log('  claude-auto-retry uninstall          Remove shell wrapper');
-    console.log('  claude-auto-retry install-hook [dir] Install the StopFailure hook (event-driven');
+    console.log('  claude-keep-going install            Install shell wrapper + tmux');
+    console.log('  claude-keep-going uninstall          Remove shell wrapper');
+    console.log('  claude-keep-going install-hook [dir] Install the StopFailure hook (event-driven');
     console.log('                                       overload detection) into <dir>/settings.json');
     console.log('                                       (default: $CLAUDE_CONFIG_DIR or ~/.claude)');
-    console.log('  claude-auto-retry uninstall-hook [dir]  Remove the StopFailure hook');
-    console.log('  claude-auto-retry reconcile          Re-arm a monitor for every live tmux');
+    console.log('  claude-keep-going uninstall-hook [dir]  Remove the StopFailure hook');
+    console.log('  claude-keep-going reconcile          Re-arm a monitor for every live tmux');
     console.log('                                       claude session not already covered');
     console.log('                                       (--dry-run to preview). Run after a crash.');
-    console.log('  claude-auto-retry exclude-self       Keep THIS session unmonitored (durable,');
+    console.log('  claude-keep-going exclude-self       Keep THIS session unmonitored (durable,');
     console.log('                                       by claude PID; self-expires on exit)');
-    console.log('  claude-auto-retry install-timer      Install a timer that runs reconcile every');
+    console.log('  claude-keep-going install-timer      Install a timer that runs reconcile every');
     console.log('                                       5 min (self-healing coverage; systemd --user');
     console.log('                                       on Linux, launchd LaunchAgent on macOS)');
-    console.log('  claude-auto-retry uninstall-timer    Remove the reconcile timer');
-    console.log('  claude-auto-retry status             Show monitor status');
-    console.log('  claude-auto-retry logs               Tail today\'s log');
-    console.log('  claude-auto-retry version            Print version');
+    console.log('  claude-keep-going uninstall-timer    Remove the reconcile timer');
+    console.log('  claude-keep-going status             Show monitor status');
+    console.log('  claude-keep-going logs               Tail today\'s log');
+    console.log('  claude-keep-going version            Print version');
     break;
 }

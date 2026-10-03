@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// #65: `npm uninstall -g claude-auto-retry` (without `claude-auto-retry uninstall`
+// #65: `npm uninstall -g claude-keep-going` (without `claude-keep-going uninstall`
 // first) deletes launcher.js but leaves the rc-file wrapper pointing at it — every
 // `claude` invocation then dies with MODULE_NOT_FOUND. The wrapper must degrade to
 // `command claude` when the launcher is gone, so an orphaned wrapper is harmless.
@@ -24,11 +24,11 @@ describe('wrapper.sh degrades when the launcher no longer exists (#65)', () => {
   after(async () => { await rm(dir, { recursive: true, force: true }); });
 
   // Strip the wrapped-session flag: when the test suite itself runs inside a
-  // claude-auto-retry session, the inherited CLAUDE_AUTO_RETRY_ACTIVE=1 would make
+  // claude-keep-going session, the inherited CLAUDE_KEEP_GOING_ACTIVE=1 would make
   // the wrapper degrade unconditionally and mask the launcher-exists path.
   function cleanEnv() {
     const env = { ...process.env, PATH: `${dir}:${process.env.PATH}` };
-    delete env.CLAUDE_AUTO_RETRY_ACTIVE;
+    delete env.CLAUDE_KEEP_GOING_ACTIVE;
     return env;
   }
 

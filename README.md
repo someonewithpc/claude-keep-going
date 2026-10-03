@@ -1,20 +1,18 @@
-# claude-auto-retry
+# claude-keep-going
 
-> Automatically retry Claude Code sessions when you hit Anthropic subscription rate limits.
+> Keep unattended Claude Code sessions going through usage limits and API errors.
 
-When Claude Code shows *"5-hour limit reached - resets 3pm"*, this tool waits for the reset and sends "continue" automatically. You come back to find your work done.
+When Claude Code shows *"5-hour limit reached - resets 3pm"*, this tool waits for the reset and sends "continue". You come back to find your work done.
 
-**No dependencies. No workflow change. Just install and forget.**
+No dependencies, and the `claude` command works the same as before.
 
-[![npm version](https://img.shields.io/npm/v/claude-auto-retry.svg)](https://www.npmjs.com/package/claude-auto-retry)
+[![npm version](https://img.shields.io/npm/v/claude-keep-going.svg)](https://www.npmjs.com/package/claude-keep-going)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
-> **📢 Status (Aug 2026):** The Claude **Desktop app** now does this natively — an *"☑ Auto-continue when limits reset"* checkbox ([confirmed in the wild](https://github.com/anthropics/claude-code/issues/35744#issuecomment-5278232593)). The **CLI still doesn't have it** — that's the gap this tool covers today. Track [anthropics/claude-code#35744](https://github.com/anthropics/claude-code/issues/35744) for the native CLI version; until it lands, `npm i -g claude-auto-retry` is the way.
+This is a fork of [cheapestinference/claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry), renamed because it is growing past retries. Upstream has open PRs waiting since July 2026, so changes land here instead.
 
 ---
-
-> 💡 **Why wait out the limit at all?** This tool auto-resumes Claude Code the moment you're rate-limited — but if you run overnight jobs or always-on agents, there's a way to stop hitting the wall in the first place. **[See how it's done →](https://cheapestinference.com/blog/claude-code-usage-limit-auto-retry/?utm_source=claude-auto-retry)**
 
 ## The Problem
 
@@ -29,8 +27,8 @@ Claude stops. You have to wait hours, come back, and type "continue". If you're 
 ## The Solution
 
 ```bash
-npm i -g claude-auto-retry
-claude-auto-retry install
+npm i -g claude-keep-going
+claude-keep-going install
 ```
 
 That's it. Type `claude` as you always do. When the rate limit hits, the tool:
@@ -203,13 +201,13 @@ All fields optional. Invalid values fall back to defaults automatically.
 
 ### Launch wrapper
 
-Set `CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER` to a prefix command and it's prepended to each
+Set `CLAUDE_KEEP_GOING_LAUNCH_WRAPPER` to a prefix command and it's prepended to each
 interactive session — useful for keeping a machine awake while Claude works, or any other
 per-process wrapper:
 
 ```sh
 # macOS: don't sleep while a session runs
-export CLAUDE_AUTO_RETRY_LAUNCH_WRAPPER="caffeinate -i"
+export CLAUDE_KEEP_GOING_LAUNCH_WRAPPER="caffeinate -i"
 ```
 
 Generic (not macOS-specific — e.g. `nice`, `chrt …` work too). Unset or blank spawns
@@ -224,11 +222,11 @@ inspection. Two opt-outs:
 
 ```sh
 # Always keep a shell in the pane after claude exits (the pre-0.7 behavior)
-export CLAUDE_AUTO_RETRY_KEEP_SHELL=1
+export CLAUDE_KEEP_GOING_KEEP_SHELL=1
 
 # Never create a tmux session (e.g. you're inside Zellij/screen and don't want nesting).
 # Note: the monitor needs a tmux pane to watch, so this disables auto-retry for the run.
-export CLAUDE_AUTO_RETRY_NO_TMUX=1
+export CLAUDE_KEEP_GOING_NO_TMUX=1
 ```
 
 ### Environment forwarding
@@ -309,8 +307,8 @@ trigger, install the **`StopFailure` hook** — Claude Code fires it precisely w
 turn ends in an API error, with a typed error class:
 
 ```sh
-claude-auto-retry install-hook                  # into $CLAUDE_CONFIG_DIR or ~/.claude
-claude-auto-retry install-hook /path/to/config  # repeat per CLAUDE_CONFIG_DIR you use
+claude-keep-going install-hook                  # into $CLAUDE_CONFIG_DIR or ~/.claude
+claude-keep-going install-hook /path/to/config  # repeat per CLAUDE_CONFIG_DIR you use
 ```
 
 This adds a `StopFailure` hook (matcher `overloaded|server_error`) that writes a
@@ -496,7 +494,7 @@ the bundled reader script, passing the current pane id **and** the server's sock
 
 ```tmux
 set -g status-interval 5
-set -g status-right "#(~/.local/lib/node_modules/claude-auto-retry/bin/tmux-status.sh '#{pane_id}' '#{socket_path}') | %Y-%m-%d %H:%M"
+set -g status-right "#(~/.local/lib/node_modules/claude-keep-going/bin/tmux-status.sh '#{pane_id}' '#{socket_path}') | %Y-%m-%d %H:%M"
 ```
 
 **Use an absolute path, not the bare command name.** `#()` commands run inside the tmux
@@ -504,7 +502,7 @@ set -g status-right "#(~/.local/lib/node_modules/claude-auto-retry/bin/tmux-stat
 if the server was started before your shell rc added `npm`/`nvm`'s bin directory to
 `PATH` (e.g. tmux auto-started at login, or by another program), the bare command name
 resolves to nothing and the segment stays permanently blank with no error anywhere.
-Find your actual install path with `which claude-auto-retry-tmux-status` (run it in a
+Find your actual install path with `which claude-keep-going-tmux-status` (run it in a
 normal shell, then hardcode that path in `.tmux.conf`) if it differs from the example
 above. If you use nvm and switch Node versions, re-check the path.
 
@@ -524,14 +522,14 @@ It prints:
 
 | Pane state | Indicator |
 |------------|-----------|
-| Actively monitoring | `🟢AR` |
-| Waiting on a usage-limit reset | `⏳AR 1h30m` |
-| Backing off from overload | `🟠AR 45s` |
-| Retrying past a safeguard/AUP false-positive | `🛡AR 8s` |
-| Given up — max retries/backoff cap reached; no further automatic action on this pane | `🔴AR` |
+| Actively monitoring | `🟢KG` |
+| Waiting on a usage-limit reset | `⏳KG 1h30m` |
+| Backing off from overload | `🟠KG 45s` |
+| Retrying past a safeguard/AUP false-positive | `🛡KG 8s` |
+| Given up — max retries/backoff cap reached; no further automatic action on this pane | `🔴KG` |
 | No monitor for this pane, or the status file is stale (monitor process died without cleaning up) | *(nothing)* |
 
-`🔴AR` overrides whatever the underlying status would otherwise render. Several
+`🔴KG` overrides whatever the underlying status would otherwise render. Several
 give-up paths intentionally leave the monitor's internal status at whatever it was
 when it stopped acting (so the scraper/event logic doesn't re-detect its own stale
 error next tick) — without an explicit `gaveUp` flag in the snapshot, the status bar
@@ -551,23 +549,23 @@ default `pollIntervalSeconds`) keeps the overload countdown responsive.
 ## CLI Commands
 
 ```bash
-claude-auto-retry install          # Install shell wrapper + tmux
-claude-auto-retry uninstall        # Remove shell wrapper
-claude-auto-retry status           # Show monitor activity + last log entries
-claude-auto-retry logs             # Tail today's log file in real-time
-claude-auto-retry version          # Print version
+claude-keep-going install          # Install shell wrapper + tmux
+claude-keep-going uninstall        # Remove shell wrapper
+claude-keep-going status           # Show monitor activity + last log entries
+claude-keep-going logs             # Tail today's log file in real-time
+claude-keep-going version          # Print version
 
 # Event-driven overload detection (optional; see "Overload backoff")
-claude-auto-retry install-hook [dir]    # Install the StopFailure hook into a config dir
-claude-auto-retry uninstall-hook [dir]  # Remove it
+claude-keep-going install-hook [dir]    # Install the StopFailure hook into a config dir
+claude-keep-going uninstall-hook [dir]  # Remove it
 
 # Monitor coverage (see "Keeping monitors alive")
-claude-auto-retry reconcile        # Re-arm a monitor for every live claude pane not covered
-claude-auto-retry reconcile --dry-run   # Preview without arming
-claude-auto-retry install-timer    # Run reconcile every 5 min (systemd --user on Linux,
+claude-keep-going reconcile        # Re-arm a monitor for every live claude pane not covered
+claude-keep-going reconcile --dry-run   # Preview without arming
+claude-keep-going install-timer    # Run reconcile every 5 min (systemd --user on Linux,
                                    # launchd LaunchAgent on macOS)
-claude-auto-retry uninstall-timer  # Remove the timer
-claude-auto-retry exclude-self     # Keep THIS session unmonitored (durable, self-expiring)
+claude-keep-going uninstall-timer  # Remove the timer
+claude-keep-going exclude-self     # Keep THIS session unmonitored (durable, self-expiring)
 ```
 
 ## For AI Agents
@@ -576,9 +574,9 @@ If you are an AI agent (Claude Code, Codex, etc.) installing this for your user,
 full setup is non-interactive:
 
 ```bash
-npm install -g claude-auto-retry
-claude-auto-retry install        # shell wrapper (+ tmux if missing)
-claude-auto-retry install-hook   # recommended: event-driven, scrape-free overload detection
+npm install -g claude-keep-going
+claude-keep-going install        # shell wrapper (+ tmux if missing)
+claude-keep-going install-hook   # recommended: event-driven, scrape-free overload detection
 ```
 
 Notes for agents:
@@ -586,12 +584,12 @@ Notes for agents:
 - The wrapper takes effect in **new** shells — have the user `source` their shell rc or
   open a new terminal. Sessions launched via the wrapper run inside tmux (required by
   the monitor).
-- Verify with `claude-auto-retry status` (monitor activity) and `claude-auto-retry logs`.
+- Verify with `claude-keep-going status` (monitor activity) and `claude-keep-going logs`.
 - Configuration is optional and defaults are safe. To change it, write
   `~/.claude-auto-retry.json` (see [Configuration](#configuration)); invalid values fall
   back to defaults instead of crashing.
-- If the user runs multiple `CLAUDE_CONFIG_DIR`s, repeat `claude-auto-retry install-hook <path>` per dir.
-- Clean removal: `claude-auto-retry uninstall` and `claude-auto-retry uninstall-hook`.
+- If the user runs multiple `CLAUDE_CONFIG_DIR`s, repeat `claude-keep-going install-hook <path>` per dir.
+- Clean removal: `claude-keep-going uninstall` and `claude-keep-going uninstall-hook`.
 
 ## Keeping monitors alive
 
@@ -615,7 +613,7 @@ sessions get a monitor. Two commands restore and maintain full coverage:
   the tmux server it reconciles lives in your login session too).
 
 **Excluding a session.** To keep a specific session *unmonitored* (e.g. one where you're
-pasting rate-limit text and don't want any auto-retry), run `claude-auto-retry
+pasting rate-limit text and don't want any auto-retry), run `claude-keep-going
 exclude-self` from inside it. This records the session's `claude` PID in
 `~/.claude-auto-retry/reconcile-exclude`; both `reconcile` and the timer skip it. Keying
 on the PID makes the entry **self-expiring**: dead PIDs are pruned when the file is read,
@@ -636,7 +634,7 @@ pruned, since staleness can't be detected). Prefer the PID form; you can also ha
 | macOS | `brew` | Fully supported |
 | Arch Linux | `pacman` | Fully supported |
 | Alpine | `apk` | Fully supported |
-| Windows | — | **Not supported natively** — the tool drives a tmux pane, which Windows does not have. Use WSL2 (Ubuntu), where it works as on Linux. A native backend via a tmux-compatible multiplexer is being discussed in [#79](https://github.com/cheapestinference/claude-auto-retry/issues/79). |
+| Windows | — | **Not supported natively** — the tool drives a tmux pane, which Windows does not have. Use WSL2 (Ubuntu), where it works as on Linux. A native backend via a tmux-compatible multiplexer is being discussed in [#79](https://github.com/someonewithpc/claude-keep-going/issues/79). |
 
 ### Requirements
 
@@ -657,7 +655,7 @@ The repo is also a flake, for anyone who'd rather manage this declaratively than
 `npm i -g` + `install`. It exposes:
 
 - `packages.<system>.default`: the package, built from source (no npm registry fetch).
-- `overlays.default`: adds `claude-auto-retry` to `pkgs`.
+- `overlays.default`: adds `claude-keep-going` to `pkgs`.
 - `nixosModules.default`: a NixOS module, no home-manager required.
 - `homeManagerModules.default`: a home-manager module (Linux and Darwin).
 
@@ -671,13 +669,13 @@ step, and no shell-rc file to keep mutable for it.
 
 ```nix
 {
-  inputs.claude-auto-retry.url = "github:cheapestinference/claude-auto-retry";
+  inputs.claude-keep-going.url = "github:someonewithpc/claude-keep-going";
 
-  outputs = { self, nixpkgs, claude-auto-retry, ... }: {
+  outputs = { self, nixpkgs, claude-keep-going, ... }: {
     nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
       modules = [
-        claude-auto-retry.nixosModules.default
-        { programs.claude-auto-retry.enable = true; }
+        claude-keep-going.nixosModules.default
+        { programs.claude-keep-going.enable = true; }
       ];
     };
   };
@@ -688,8 +686,8 @@ step, and no shell-rc file to keep mutable for it.
 
 ```nix
 {
-  imports = [ claude-auto-retry.homeManagerModules.default ];
-  programs.claude-auto-retry.enable = true;
+  imports = [ claude-keep-going.homeManagerModules.default ];
+  programs.claude-keep-going.enable = true;
 }
 ```
 
@@ -725,8 +723,8 @@ Logs rotate daily. Files older than 7 days are cleaned automatically.
 ## Uninstall
 
 ```bash
-claude-auto-retry uninstall
-npm uninstall -g claude-auto-retry
+claude-keep-going uninstall
+npm uninstall -g claude-keep-going
 ```
 
 This removes the shell function from your rc files. tmux is left installed.
@@ -735,7 +733,7 @@ This removes the shell function from your rc files. tmux is left installed.
 
 1. **Retry message context** — The retry message is sent as plain text. If Claude was mid-confirmation or in a special input state, it may not interpret it as a continuation. You can customize the message via config.
 
-2. **Node version lock** — The launcher path is resolved at install time. If you switch Node versions with nvm, re-run `claude-auto-retry install`.
+2. **Node version lock** — The launcher path is resolved at install time. If you switch Node versions with nvm, re-run `claude-keep-going install`.
 
 3. **tmux required** — The tool needs tmux to monitor terminal output and inject keystrokes. It auto-installs if missing, but requires sudo for system package managers.
 
@@ -746,8 +744,8 @@ Contributions are welcome! Here's how to get started:
 ### Development Setup
 
 ```bash
-git clone https://github.com/cheapestinference/claude-auto-retry.git
-cd claude-auto-retry
+git clone https://github.com/someonewithpc/claude-keep-going.git
+cd claude-keep-going
 npm test            # Run all 128 tests
 npm link            # Install locally for testing
 ```
@@ -755,7 +753,7 @@ npm link            # Install locally for testing
 ### Project Structure
 
 ```
-claude-auto-retry/
+claude-keep-going/
 ├── bin/cli.js              # CLI: install, hook, reconcile, timer, status, logs, ...
 ├── src/
 │   ├── patterns.js         # Rate limit + overload detection + ANSI stripping
@@ -839,4 +837,4 @@ MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
-Made with care by [CheapestInference](https://github.com/cheapestinference).
+Originally written by [CheapestInference](https://github.com/cheapestinference). Fork maintained by [Hugo Sales](https://github.com/someonewithpc).

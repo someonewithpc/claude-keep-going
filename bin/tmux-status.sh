@@ -1,10 +1,10 @@
 #!/bin/sh
-# tmux status-bar segment for claude-auto-retry. Pure POSIX (no bashisms) so it runs
+# tmux status-bar segment for claude-keep-going. Pure POSIX (no bashisms) so it runs
 # on dependency-light hosts (Alpine/busybox) too — matching the "dependency-free" claim,
 # hence #!/bin/sh rather than #!/usr/bin/env bash.
 #
 # Usage in ~/.tmux.conf (see README "tmux status bar indicator" for the full recipe):
-#   #(~/.local/lib/node_modules/claude-auto-retry/bin/tmux-status.sh '#{pane_id}' '#{socket_path}')
+#   #(~/.local/lib/node_modules/claude-keep-going/bin/tmux-status.sh '#{pane_id}' '#{socket_path}')
 #
 # The 2nd arg (tmux's own #{socket_path} format variable) disambiguates panes across
 # independent tmux servers (`tmux -L work` vs `tmux -L personal` can each have a "%2")
@@ -53,7 +53,7 @@ staleAfter=$(( interval * 2 ))
 # explicit flag is a lot more honest than reverse-engineering "given up" from timestamps.
 gaveUp=$(printf '%s' "$json" | grep -o '"gaveUp":true')
 if [ -n "$gaveUp" ]; then
-  printf '🔴AR'
+  printf '🔴KG'
   exit 0
 fi
 
@@ -63,25 +63,25 @@ case "$status" in
     remain=$(( waitUntil - now ))
     [ "$remain" -lt 0 ] && remain=0
     if [ "$remain" -ge 3600 ]; then
-      printf '⏳AR %dh%02dm' $(( remain / 3600 )) $(( (remain % 3600) / 60 ))
+      printf '⏳KG %dh%02dm' $(( remain / 3600 )) $(( (remain % 3600) / 60 ))
     else
-      printf '⏳AR %dm' $(( remain / 60 ))
+      printf '⏳KG %dm' $(( remain / 60 ))
     fi
     ;;
   overload)
     overloadWaitUntil=$(printf '%s' "$json" | grep -o '"overloadWaitUntil":[0-9]*' | head -1 | grep -o '[0-9]*')
     remain=$(( overloadWaitUntil - now ))
     [ "$remain" -lt 0 ] && remain=0
-    printf '🟠AR %ds' "$remain"
+    printf '🟠KG %ds' "$remain"
     ;;
   safeguard)
     safeguardWaitUntil=$(printf '%s' "$json" | grep -o '"safeguardWaitUntil":[0-9]*' | head -1 | grep -o '[0-9]*')
     remain=$(( safeguardWaitUntil - now ))
     [ "$remain" -lt 0 ] && remain=0
-    printf '🛡AR %ds' "$remain"
+    printf '🛡KG %ds' "$remain"
     ;;
   monitoring)
-    printf '🟢AR'
+    printf '🟢KG'
     ;;
   *)
     exit 0

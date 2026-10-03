@@ -1,6 +1,6 @@
 # Design notes
 
-Forward-looking design notes for `claude-auto-retry`, grounded in a research pass
+Forward-looking design notes for `claude-keep-going`, grounded in a research pass
 (2026-06) against the installed Claude Code binary (v2.1.195, decompiled), the
 Anthropic API error schema, and Claude Code's hooks/transcript surfaces. Ordered by
 leverage. Items marked **[done]** ship in the current version; the rest are proposals
@@ -42,8 +42,8 @@ move is to stop using the scrape as the *trigger*.
 
 ## 1. Replace the trigger with `StopFailure` (highest leverage) — **[done, v0.4.0]**
 
-**Implemented.** The launcher stamps `CLAUDE_AUTO_RETRY_PANE` onto claude's env; the
-`StopFailure` hook (`claude-auto-retry _stopfailure-hook`, installed via
+**Implemented.** The launcher stamps `CLAUDE_KEEP_GOING_PANE` onto claude's env; the
+`StopFailure` hook (`claude-keep-going _stopfailure-hook`, installed via
 `install-hook`) runs as a claude child, inherits that var, and writes a pane-keyed
 marker under `~/.claude-auto-retry/events/` for the transient-overload error types
 (`overloaded|server_error` — `rate_limit` is deliberately excluded: it is the hours-scale
@@ -147,7 +147,7 @@ can't say *why* it fired is undebuggable in the field.
 This session accumulated **four** detached `monitor.js` processes across launches, some
 watching reused pane IDs — diagnosing required `pgrep`/`kill` by hand. Gaps:
 
-- **No `claude-auto-retry ps` / `stop`.** Add both (list running monitors with pane +
+- **No `claude-keep-going ps` / `stop`.** Add both (list running monitors with pane +
   watched PID + status from logs; stop one or all). Pure operability win.
 - **Pane-ID reuse.** tmux recycles pane IDs. A monitor whose pane closed and whose ID
   was reassigned could `send-keys` into the wrong pane. The PID-liveness check bounds

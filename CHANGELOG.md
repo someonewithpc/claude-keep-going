@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Renamed to claude-keep-going.** This fork of claude-auto-retry has a new package name,
+  binary, Nix option (`programs.claude-keep-going`), systemd and launchd unit names, and
+  environment variables (`CLAUDE_KEEP_GOING_*`). The status badge reads `KG` instead of `AR`.
+  State files stay under `~/.claude-auto-retry*` for now, so running monitors keep working.
+
 ### Fixed
 - **A weekly-limit banner with a calendar date is now detected and parsed.** Weekly limits
   render their reset with a date — "You've hit your weekly limit · resets Aug 21 at 3pm

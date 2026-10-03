@@ -1,4 +1,4 @@
-# claude-auto-retry
+# claude-keep-going
 
 > Zero-dependency CLI that auto-retries Claude Code sessions. When a subscription
 > usage/session limit hits ("You've hit your session limit · resets 2am"), it waits
@@ -9,7 +9,7 @@
 > suspend or a dropped connection ("Your computer went to sleep mid-response") is
 > resumed. tmux-based, so it keeps working after you disconnect.
 
-Install: `npm i -g claude-auto-retry && claude-auto-retry install` — then use `claude`
+Install: `npm i -g claude-keep-going && claude-keep-going install` — then use `claude`
 as usual.
 
 Key facts:
@@ -31,14 +31,14 @@ Key facts:
 
 ## Docs
 
-- [README](https://github.com/cheapestinference/claude-auto-retry/blob/master/README.md): features, configuration, every error render detected
-- [DESIGN-NOTES](https://github.com/cheapestinference/claude-auto-retry/blob/master/DESIGN-NOTES.md): architecture — StopFailure hook event channel vs. terminal scraper, overload backoff design
-- [CHANGELOG](https://github.com/cheapestinference/claude-auto-retry/blob/master/CHANGELOG.md): release history
+- [README](https://github.com/someonewithpc/claude-keep-going/blob/main/README.md): features, configuration, every error render detected
+- [DESIGN-NOTES](https://github.com/someonewithpc/claude-keep-going/blob/main/DESIGN-NOTES.md): architecture — StopFailure hook event channel vs. terminal scraper, overload backoff design
+- [CHANGELOG](https://github.com/someonewithpc/claude-keep-going/blob/main/CHANGELOG.md): release history
 
 ## Install for a user (agent-friendly, non-interactive)
 
-- `npm install -g claude-auto-retry`
-- `claude-auto-retry install` — shell wrapper (+ tmux if missing); takes effect in new shells
-- `claude-auto-retry install-hook` — recommended: event-driven overload detection via Claude Code's StopFailure hook
-- Verify: `claude-auto-retry status`
-- Remove: `claude-auto-retry uninstall` and `claude-auto-retry uninstall-hook`
+- `npm install -g claude-keep-going`
+- `claude-keep-going install` — shell wrapper (+ tmux if missing); takes effect in new shells
+- `claude-keep-going install-hook` — recommended: event-driven overload detection via Claude Code's StopFailure hook
+- Verify: `claude-keep-going status`
+- Remove: `claude-keep-going uninstall` and `claude-keep-going uninstall-hook`

@@ -1,6 +1,6 @@
 [Unit]
-Description=Periodically reconcile claude-auto-retry monitors (self-healing coverage)
-Documentation=https://github.com/cheapestinference/claude-auto-retry
+Description=Periodically reconcile claude-keep-going monitors (self-healing coverage)
+Documentation=https://github.com/someonewithpc/claude-keep-going
 
 [Timer]
 # First run shortly after the user session comes up (lets tmux settle)...

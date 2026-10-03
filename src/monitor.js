@@ -761,7 +761,7 @@ export async function startMonitor(pane, pid) {
       if (result === 'user-continued') await logger.info('User already continued. Attempt counter reset.');
       if (result === 'max-retries') await logger.warn(`Max retries (${config.maxRetries}) reached. Monitor still active but will not send further retries until rate limit clears.`);
       if (result === 'skipped-not-claude') await logger.warn(`Foreground is "${state._lastForeground}", not Claude. Skipping send-keys. (Add to foregroundCommands in ~/.claude-auto-retry.json if this is wrong)`);
-      if (result === 'event-ignored') await logger.warn(`Ignored StopFailure marker with non-retryable error="${state._ignoredEventError}". If this is "rate_limit", an outdated hook is installed — re-run "claude-auto-retry install-hook".`);
+      if (result === 'event-ignored') await logger.warn(`Ignored StopFailure marker with non-retryable error="${state._ignoredEventError}". If this is "rate_limit", an outdated hook is installed — re-run "claude-keep-going install-hook".`);
       if (result === 'overload-detected') {
         const secs = Math.round((state.overloadWaitUntil - Date.now()) / 1000);
         const m = state._overloadMatch;

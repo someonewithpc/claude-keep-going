@@ -21,11 +21,11 @@ describe('renderReconcileUnit (Finding 7)', () => {
     assert.ok(!out.includes('__NODE_PATH__') && !out.includes('__CLI_PATH__'));
   });
   it('the shipped .service template quotes the ExecStart placeholders', async () => {
-    const svc = await readFile(join(REPO_ROOT, 'systemd', 'claude-auto-retry-reconcile.service'), 'utf-8');
+    const svc = await readFile(join(REPO_ROOT, 'systemd', 'claude-keep-going-reconcile.service'), 'utf-8');
     assert.match(svc, /ExecStart="__NODE_PATH__" "__CLI_PATH__" reconcile/);
   });
   it('the shipped .timer template has no no-op Persistent=true', async () => {
-    const timer = await readFile(join(REPO_ROOT, 'systemd', 'claude-auto-retry-reconcile.timer'), 'utf-8');
+    const timer = await readFile(join(REPO_ROOT, 'systemd', 'claude-keep-going-reconcile.timer'), 'utf-8');
     assert.ok(!/Persistent\s*=\s*true/.test(timer));
   });
 });
@@ -40,7 +40,7 @@ describe('renderReconcilePlist (macOS launchd)', () => {
     assert.ok(!out.includes('__NODE_PATH__') && !out.includes('__CLI_PATH__'));
   });
   it('the shipped plist template has the placeholders and detaches monitors from the job', async () => {
-    const plist = await readFile(join(REPO_ROOT, 'launchd', 'com.claude-auto-retry.reconcile.plist'), 'utf-8');
+    const plist = await readFile(join(REPO_ROOT, 'launchd', 'com.claude-keep-going.reconcile.plist'), 'utf-8');
     assert.match(plist, /<string>__NODE_PATH__<\/string>\s*<string>__CLI_PATH__<\/string>\s*<string>reconcile<\/string>/);
     // Same reason the systemd unit needs KillMode=process: without it the short-lived
     // reconcile job's exit reaps the freshly-armed detached monitors.
@@ -49,7 +49,7 @@ describe('renderReconcilePlist (macOS launchd)', () => {
   it('the shipped plist sets a PATH that reaches a Homebrew tmux', async () => {
     // launchd jobs get only the system default PATH; without both Homebrew prefixes
     // reconcile dies with `spawn tmux ENOENT` on every timer fire.
-    const plist = await readFile(join(REPO_ROOT, 'launchd', 'com.claude-auto-retry.reconcile.plist'), 'utf-8');
+    const plist = await readFile(join(REPO_ROOT, 'launchd', 'com.claude-keep-going.reconcile.plist'), 'utf-8');
     assert.match(plist, /<key>PATH<\/key>\s*<string>[^<]*\/opt\/homebrew\/bin[^<]*\/usr\/local\/bin[^<]*<\/string>/);
   });
 });

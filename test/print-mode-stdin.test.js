@@ -45,7 +45,7 @@ describe('print-mode retry re-feeds piped stdin', () => {
   it('does not hang when stdin is an open pipe that never sends data', async () => {
     const { spawn } = await import('node:child_process');
     const env = { ...process.env, HOME: join(dir, 'home'), PATH: `${dir}:${process.env.PATH}` };
-    delete env.CLAUDE_AUTO_RETRY_ACTIVE;
+    delete env.CLAUDE_KEEP_GOING_ACTIVE;
     await writeFile(join(dir, 'count'), '1');   // stub claude answers normally (run 2 shape)
     const child = spawn(process.execPath, [join(REPO_ROOT, 'src', 'launcher.js'), '-p', 'go'],
       { env, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -60,7 +60,7 @@ describe('print-mode retry re-feeds piped stdin', () => {
 
   it('the retry attempt receives the original piped prompt', () => {
     const env = { ...process.env, HOME: join(dir, 'home'), PATH: `${dir}:${process.env.PATH}` };
-    delete env.CLAUDE_AUTO_RETRY_ACTIVE;   // dev boxes running inside a wrapped session
+    delete env.CLAUDE_KEEP_GOING_ACTIVE;   // dev boxes running inside a wrapped session
     const out = execFileSync(process.execPath, [join(REPO_ROOT, 'src', 'launcher.js'), '-p', 'go'], {
       env, input: 'the important prompt', encoding: 'utf-8', timeout: 30_000,
     });

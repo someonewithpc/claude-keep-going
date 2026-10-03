@@ -64,7 +64,7 @@ describe('buildSetWindowOptionArgs', () => {
       ['set-window-option', '-t', 'session:0', 'mouse', 'on']);
   });
   it('builds correct args for mode-keys vi', () => {
-    assert.deepEqual(buildSetWindowOptionArgs('claude-retry-123:0', 'mode-keys', 'vi'),
-      ['set-window-option', '-t', 'claude-retry-123:0', 'mode-keys', 'vi']);
+    assert.deepEqual(buildSetWindowOptionArgs('claude-keep-going-123:0', 'mode-keys', 'vi'),
+      ['set-window-option', '-t', 'claude-keep-going-123:0', 'mode-keys', 'vi']);
   });
 });

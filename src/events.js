@@ -3,7 +3,7 @@
 // Claude Code's `StopFailure` hook fires only when a turn ends in an API error, with a
 // typed `error` (matcher-filtered to overloaded/server_error). The hook runs
 // as a CHILD of claude, so it inherits the env the launcher stamped onto claude —
-// including CLAUDE_AUTO_RETRY_PANE. It writes a marker keyed by that pane; the daemon,
+// including CLAUDE_KEEP_GOING_PANE. It writes a marker keyed by that pane; the daemon,
 // which already knows its pane, reads it directly. No session-id plumbing needed (the
 // main claude PID's environ does not even carry CLAUDE_CODE_SESSION_ID).
 //
@@ -38,7 +38,7 @@ export function isRetryableError(errorType) {
 // so a bare-pane filename let `tmux -L work`'s %2 marker be consumed by the monitor
 // watching the default server's %2 — the wrong session got retried and the owner missed
 // its event. Both sides can key this: the hook inherits $TMUX from inside the pane, the
-// monitor has $TMUX (wrapper-armed) or CLAUDE_AUTO_RETRY_SOCKET (reconcile-armed).
+// monitor has $TMUX (wrapper-armed) or CLAUDE_KEEP_GOING_SOCKET (reconcile-armed).
 function fileFor(paneKey, dir) {
   return join(dir, `${sanitizeKey(socketIdFromEnv())}_${sanitizeKey(paneKey)}.json`);
 }

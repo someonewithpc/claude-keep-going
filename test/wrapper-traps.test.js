@@ -39,7 +39,7 @@ describe('wrapper.sh preserves user INT/TERM traps', () => {
 
   const cleanEnv = () => {
     const env = { ...process.env };
-    delete env.CLAUDE_AUTO_RETRY_ACTIVE;   // dev boxes running inside a wrapped session
+    delete env.CLAUDE_KEEP_GOING_ACTIVE;   // dev boxes running inside a wrapped session
     return env;
   };
 
