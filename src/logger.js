@@ -1,8 +1,8 @@
 import { appendFile, mkdir, readdir, unlink, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { PATHS } from './paths.js';
 
-const DEFAULT_LOG_DIR = join(homedir(), '.claude-auto-retry', 'logs');
+const DEFAULT_LOG_DIR = PATHS.logs;
 const MAX_AGE_DAYS = 7;
 const CLEANUP_INTERVAL_MS = 3600_000;
 let lastCleanup = 0;

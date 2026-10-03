@@ -10,12 +10,12 @@
 // Markers are short-lived (consumed on action, ignored past eventMaxAge) so a recycled
 // tmux pane id can't replay a stale failure.
 
-import { mkdir, writeFile, readFile, unlink, rename } from 'node:fs/promises';
+import { writeFile, readFile, unlink, rename } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { PATHS, ensurePrivateDir } from './paths.js';
 import { sanitizeKey, socketIdFromEnv } from './pane-key.js';
 
-export const EVENTS_DIR = join(homedir(), '.claude-auto-retry', 'events');
+export const EVENTS_DIR = PATHS.events;
 
 // Error types the event path treats as a *transient overload* (seconds-scale backoff).
 // NOTE: `rate_limit` is deliberately EXCLUDED. For a subscription it is the session/usage
@@ -62,7 +62,7 @@ function legacyFileFor(paneKey, dir) {
 export async function writeStopFailureEvent(paneKey, payload, dir = EVENTS_DIR) {
   if (!paneKey) return null;
   const error = typeof payload?.error === 'string' ? payload.error : 'unknown';
-  await mkdir(dir, { recursive: true });
+  ensurePrivateDir(dir);
   const file = fileFor(paneKey, dir);
   const tmp = `${file}.${process.pid}.tmp`;
   const body = JSON.stringify({

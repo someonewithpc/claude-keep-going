@@ -8,6 +8,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeStopFailureEvent, isRetryableError, isUsageLimitError } from '../src/events.js';
 import { sweepStaleStatus } from '../src/status-file.js';
+import { PATHS } from '../src/paths.js';
 import { reconcile, excludeSelf, parseRunningMonitors, PGREP_LIST_FLAG } from '../src/reconcile.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -181,7 +182,7 @@ async function cmdUninstall() {
 }
 
 async function cmdStatus() {
-  const logDir = join(homedir(), '.claude-auto-retry', 'logs');
+  const logDir = PATHS.logs;
   const today = new Date().toISOString().split('T')[0];
   const logFile = join(logDir, `${today}.log`);
   try {
@@ -196,7 +197,7 @@ async function cmdStatus() {
 }
 
 async function cmdLogs() {
-  const logDir = join(homedir(), '.claude-auto-retry', 'logs');
+  const logDir = PATHS.logs;
   const today = new Date().toISOString().split('T')[0];
   const logFile = join(logDir, `${today}.log`);
   if (!existsSync(logFile)) {

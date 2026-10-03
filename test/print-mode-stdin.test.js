@@ -16,9 +16,9 @@ describe('print-mode retry re-feeds piped stdin', () => {
   let dir;
   before(async () => {
     dir = await mkdtemp(join(tmpdir(), 'car-stdin-'));
-    await mkdir(join(dir, 'home'), { recursive: true });
+    await mkdir(join(dir, 'home', '.config', 'claude-keep-going'), { recursive: true });
     // Instant retry: relative reset "0 minutes" + no margin.
-    await writeFile(join(dir, 'home', '.claude-auto-retry.json'),
+    await writeFile(join(dir, 'home', '.config', 'claude-keep-going', 'config.json'),
       JSON.stringify({ marginSeconds: 0, maxRetries: 2 }));
     // Stub claude: consumes stdin like the real `claude -p`. Run 1 prints a rate-limit
     // banner; run 2 echoes what it received on stdin.
@@ -45,6 +45,8 @@ describe('print-mode retry re-feeds piped stdin', () => {
   it('does not hang when stdin is an open pipe that never sends data', async () => {
     const { spawn } = await import('node:child_process');
     const env = { ...process.env, HOME: join(dir, 'home'), PATH: `${dir}:${process.env.PATH}` };
+    delete env.XDG_CONFIG_HOME;
+    delete env.XDG_CONFIG_DIRS;
     delete env.CLAUDE_KEEP_GOING_ACTIVE;
     await writeFile(join(dir, 'count'), '1');   // stub claude answers normally (run 2 shape)
     const child = spawn(process.execPath, [join(REPO_ROOT, 'src', 'launcher.js'), '-p', 'go'],
@@ -60,6 +62,8 @@ describe('print-mode retry re-feeds piped stdin', () => {
 
   it('the retry attempt receives the original piped prompt', () => {
     const env = { ...process.env, HOME: join(dir, 'home'), PATH: `${dir}:${process.env.PATH}` };
+    delete env.XDG_CONFIG_HOME;
+    delete env.XDG_CONFIG_DIRS;
     delete env.CLAUDE_KEEP_GOING_ACTIVE;   // dev boxes running inside a wrapped session
     const out = execFileSync(process.execPath, [join(REPO_ROOT, 'src', 'launcher.js'), '-p', 'go'], {
       env, input: 'the important prompt', encoding: 'utf-8', timeout: 30_000,

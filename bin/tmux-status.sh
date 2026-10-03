@@ -23,7 +23,14 @@ socket="${2:-default}"
 
 safe_socket=$(printf '%s' "$socket" | tr -c 'A-Za-z0-9_-' '_')
 safe_pane=$(printf '%s' "$pane" | tr -c 'A-Za-z0-9_-' '_')
-file="$HOME/.claude-auto-retry/status/${safe_socket}_${safe_pane}.json"
+# Same rule as src/paths.js: $XDG_RUNTIME_DIR, else a per-uid dir under $TMPDIR.
+if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+  runtime="$XDG_RUNTIME_DIR/claude-keep-going"
+else
+  tmp="${TMPDIR:-/tmp}"
+  runtime="${tmp%/}/claude-keep-going-$(id -u)"
+fi
+file="$runtime/status/${safe_socket}_${safe_pane}.json"
 [ -f "$file" ] || exit 0
 
 json=$(cat "$file" 2>/dev/null) || exit 0

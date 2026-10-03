@@ -2,8 +2,8 @@ import { spawn, fork } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { mkdirSync, chmodSync, writeFileSync, readFileSync, unlinkSync, readdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { PATHS, ensurePrivateDir } from './paths.js';
+import { chmodSync, writeFileSync, readFileSync, unlinkSync, readdirSync, statSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { getCurrentPane, buildSetWindowOptionArgs } from './tmux.js';
 import { isRateLimited } from './patterns.js';
@@ -53,10 +53,10 @@ function shellEscape(s) {
 // Windows `ProgramFiles(x86)` — which also removes the #58 class entirely: no env name
 // ever reaches tmux's argv parser again) and unlink it. TMUX* never crosses: the inner
 // pane's own server identity/pane id must win.
-const ENV_SNAPSHOT_DIR = join(homedir(), '.claude-auto-retry', 'tmp');
+const ENV_SNAPSHOT_DIR = PATHS.tmp;
 
 export function writeEnvSnapshot(env = process.env, dir = ENV_SNAPSHOT_DIR) {
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  ensurePrivateDir(dir);
   chmodSync(dir, 0o700);   // pre-existing dir may have been created looser
   const snap = {};
   for (const [k, v] of Object.entries(env)) {

@@ -12,12 +12,12 @@
 // Mirrors the pane-keyed write/read/clear shape of events.js (StopFailure markers), and
 // shares its filename sanitizer (see pane-key.js).
 
-import { mkdir, writeFile, readFile, unlink, rename, readdir, stat } from 'node:fs/promises';
+import { writeFile, readFile, unlink, rename, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { PATHS, ensurePrivateDir } from './paths.js';
 import { sanitizeKey, socketIdFromEnv } from './pane-key.js';
 
-export const STATUS_DIR = join(homedir(), '.claude-auto-retry', 'status');
+export const STATUS_DIR = PATHS.status;
 
 // tmux pane ids (e.g. "%2") are only unique *within one tmux server* — `tmux -L work`
 // and `tmux -L personal` (or two independent default servers on a shared host) can each
@@ -45,7 +45,7 @@ function fileFor(paneKey, dir, socketId = socketIdFromEnv()) {
 let ensuredDir = null;
 function ensureDir(dir) {
   if (!ensuredDir || ensuredDir.dir !== dir) {
-    ensuredDir = { dir, promise: mkdir(dir, { recursive: true }) };
+    ensuredDir = { dir, promise: Promise.resolve().then(() => ensurePrivateDir(dir)) };
   }
   return ensuredDir.promise;
 }

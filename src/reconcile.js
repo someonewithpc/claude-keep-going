@@ -11,10 +11,10 @@
 
 import { execFile as execFileCb, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, unlink, link, mkdir, appendFile } from 'node:fs/promises';
+import { readFile, writeFile, unlink, link, appendFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
+import { PATHS, ensurePrivateDir } from './paths.js';
 
 const execFile = promisify(execFileCb);
 const MONITOR_PATH = join(dirname(fileURLToPath(import.meta.url)), 'monitor.js');
@@ -32,7 +32,7 @@ const MONITOR_PATH = join(dirname(fileURLToPath(import.meta.url)), 'monitor.js')
 //                            unrelated session in that pane (and pane ids are NOT pruned —
 //                            we can't know if one is stale). Prefer the PID form.
 // '#' comments and blank lines are ignored.
-export const EXCLUDE_FILE = join(homedir(), '.claude-auto-retry', 'reconcile-exclude');
+export const EXCLUDE_FILE = PATHS.exclude;
 
 function isProcessAlive(pid) {
   try { process.kill(pid, 0); return true; }
@@ -45,7 +45,7 @@ function isProcessAlive(pid) {
 // holder pid and STEALS the lock only if that process is dead (crash-safe), so a stale
 // lock never wedges the timer permanently. Returns { ok, release } — release() is a no-op
 // when ok is false, so callers can always call it.
-export const LOCK_FILE = join(homedir(), '.claude-auto-retry', 'reconcile.lock');
+export const LOCK_FILE = PATHS.lock;
 
 // Process START TOKEN — an identity that survives PID reuse (a bare PID cannot: the kernel
 // reuses PIDs, so a stale lock's PID may later belong to an unrelated live process and read
@@ -121,7 +121,7 @@ async function linkCreate(path, tmp, id) {
 // never moved out from under it.
 export async function acquireLock(lockPath = LOCK_FILE) {
   const dir = dirname(lockPath);
-  await mkdir(dir, { recursive: true });
+  ensurePrivateDir(dir);
   const token = await processStartToken(process.pid);
   const myId = token ? `${process.pid}\t${token}` : String(process.pid);
   const breakerPath = `${lockPath}.breaker`;
@@ -556,7 +556,7 @@ export async function excludeSelf(pane = process.env.TMUX_PANE || null, path = E
   if (!pid) return { ok: false, reason: `no claude process found for pane ${pane}` };
   const existing = await readExcludeFile(path);
   if (existing.includes(String(pid))) return { ok: true, pane, pid, already: true };
-  await mkdir(dirname(path), { recursive: true });
+  ensurePrivateDir(dirname(path));
   await appendFile(path, `${pid}\t# pane ${pane}, excluded by exclude-self\n`);
   return { ok: true, pane, pid };
 }

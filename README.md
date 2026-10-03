@@ -175,7 +175,10 @@ regexes; the built-in detection keeps the chrome-aware discipline.
 
 ## Configuration
 
-Optional. Create `~/.claude-auto-retry.json`:
+Optional. Create `~/.config/claude-keep-going/config.json` (or under `$XDG_CONFIG_HOME`
+if you set it). A system-wide file at `/etc/xdg/claude-keep-going/config.json` (each
+`$XDG_CONFIG_DIRS` entry) is read first, and your file overrides it key by key, including
+keys inside blocks like `overload`.
 
 ```json
 {
@@ -258,7 +261,7 @@ export CLAUDE_KEEP_GOING_NO_TMUX=1
 ### Environment forwarding
 
 Your full shell environment reaches `claude` inside the tmux session via a `0600`
-snapshot file under `~/.claude-auto-retry/tmp/` that only the launcher reads (and
+snapshot file under `$XDG_RUNTIME_DIR/claude-keep-going/tmp/` that only the launcher reads (and
 deletes immediately). Nothing about your environment — names or values — ever appears
 on a `tmux` command line, so secrets can't surface in `/proc/<pid>/cmdline`.
 
@@ -615,7 +618,7 @@ Notes for agents:
   the monitor).
 - Verify with `claude-keep-going status` (monitor activity) and `claude-keep-going logs`.
 - Configuration is optional and defaults are safe. To change it, write
-  `~/.claude-auto-retry.json` (see [Configuration](#configuration)); invalid values fall
+  `~/.config/claude-keep-going/config.json` (see [Configuration](#configuration)); invalid values fall
   back to defaults instead of crashing.
 - If the user runs multiple `CLAUDE_CONFIG_DIR`s, repeat `claude-keep-going install-hook <path>` per dir.
 - Clean removal: `claude-keep-going uninstall` and `claude-keep-going uninstall-hook`.
@@ -644,7 +647,7 @@ sessions get a monitor. Two commands restore and maintain full coverage:
 **Excluding a session.** To keep a specific session *unmonitored* (e.g. one where you're
 pasting rate-limit text and don't want any auto-retry), run `claude-keep-going
 exclude-self` from inside it. This records the session's `claude` PID in
-`~/.claude-auto-retry/reconcile-exclude`; both `reconcile` and the timer skip it. Keying
+`$XDG_RUNTIME_DIR/claude-keep-going/reconcile-exclude`; both `reconcile` and the timer skip it. Keying
 on the PID makes the entry **self-expiring**: dead PIDs are pruned when the file is read,
 so once that `claude` exits its entry is dropped and can never accidentally mute a later
 session (tmux reuses pane ids, so a hand-added `%pane` exclude could — pane ids are not
@@ -737,9 +740,26 @@ For scripted/piped usage (`claude -p "..." | jq`), the tool:
 claude -p "Generate a JSON schema" | jq .
 ```
 
+## Where files live
+
+| What | Path |
+|---|---|
+| Config | `$XDG_CONFIG_HOME/claude-keep-going/config.json`, default `~/.config/...` |
+| Logs | `$XDG_STATE_HOME/claude-keep-going/logs/`, default `~/.local/state/...` |
+| Status files, StopFailure markers, reconcile lock and exclude list, env snapshots | `$XDG_RUNTIME_DIR/claude-keep-going/` |
+
+Without `XDG_RUNTIME_DIR` (macOS, some cron or `su` sessions) the runtime files go to
+`$TMPDIR/claude-keep-going-<uid>/`, which the tool refuses to use unless you own it.
+
+The shell wrapper, the monitor, the hook, the reconcile timer and `tmux-status.sh` all
+have to agree on these paths. If you set a custom `XDG_*` value in your shell rc, export it
+to the systemd user manager as well (`~/.config/environment.d/`), or the timer looks in
+the default place.
+
 ## Logging
 
-Logs are written to `~/.claude-auto-retry/logs/YYYY-MM-DD.log`:
+Logs are written to `~/.local/state/claude-keep-going/logs/YYYY-MM-DD.log` (under
+`$XDG_STATE_HOME` if set):
 
 ```
 [2026-03-18 15:00:05] [INFO] Monitor started for pane %3 (claude PID: 12345)

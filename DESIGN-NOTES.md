@@ -45,7 +45,7 @@ move is to stop using the scrape as the *trigger*.
 **Implemented.** The launcher stamps `CLAUDE_KEEP_GOING_PANE` onto claude's env; the
 `StopFailure` hook (`claude-keep-going _stopfailure-hook`, installed via
 `install-hook`) runs as a claude child, inherits that var, and writes a pane-keyed
-marker under `~/.claude-auto-retry/events/` for the transient-overload error types
+marker under `$XDG_RUNTIME_DIR/claude-keep-going/events/` (originally `~/.claude-auto-retry/events/`) for the transient-overload error types
 (`overloaded|server_error` — `rate_limit` is deliberately excluded: it is the hours-scale
 session/usage limit, owned by the scraper usage path; see src/events.js). The monitor
 reads the marker for its own pane

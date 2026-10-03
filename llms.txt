@@ -26,7 +26,7 @@ Key facts:
   stops the moment the user (or Claude) resumes, and detection is anchored to the live
   pane tail so quoted errors in scrollback can't trigger a retry.
 - Timezone- and DST-aware reset-time parsing; `--print` mode supported; optional
-  config at `~/.claude-auto-retry.json` with safe fallbacks for invalid values.
+  config at `~/.config/claude-keep-going/config.json` (XDG) with safe fallbacks for invalid values.
 - No runtime dependencies; Node >= 18; MIT license; 200+ tests.
 
 ## Docs

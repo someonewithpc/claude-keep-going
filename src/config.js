@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { PATHS } from './paths.js';
 
 // Transient API-error backoff (529 Overloaded / 500 / 503). Separate block from
 // the usage-limit knobs above: those wait in *hours* until a reset, these wait in
@@ -127,7 +126,6 @@ export const DEFAULT_CONFIG = {
   nearLimitWrapUp: DEFAULT_NEAR_LIMIT_WRAP_UP,
 };
 
-const CONFIG_PATH = join(homedir(), '.claude-auto-retry.json');
 
 function validNumber(val, min, fallback) {
   return typeof val === 'number' && Number.isFinite(val) && val >= min ? val : fallback;
@@ -233,10 +231,46 @@ function validate(cfg) {
   return cfg;
 }
 
-export async function loadConfig(path = CONFIG_PATH) {
+async function readJsonObject(path) {
   try {
-    const raw = await readFile(path, 'utf-8');
-    return validate({ ...DEFAULT_CONFIG, ...JSON.parse(raw) });
+    const parsed = JSON.parse(await readFile(path, 'utf-8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// One level deeper than a spread, so a user file that sets only `overload.enabled` keeps
+// the rest of an `overload` block from a system file.
+function layer(base, over) {
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    const b = out[k];
+    out[k] = v && typeof v === 'object' && !Array.isArray(v) && b && typeof b === 'object' && !Array.isArray(b)
+      ? { ...b, ...v }
+      : v;
+  }
+  return out;
+}
+
+// With no arguments: the user config over the system ones (XDG_CONFIG_DIRS, first entry
+// wins). An explicit path reads only that file unless system paths are passed too, so
+// tests don't pick up whatever is installed in /etc/xdg.
+export async function loadConfig(path, systemPaths) {
+  if (path === undefined) {
+    path = PATHS.config;
+    if (systemPaths === undefined) systemPaths = PATHS.systemConfigs;
+  }
+  let merged = {};
+  for (const p of [...(systemPaths || [])].reverse()) {
+    const obj = await readJsonObject(p);
+    if (obj) merged = layer(merged, obj);
+  }
+  const user = await readJsonObject(path);
+  if (user) merged = layer(merged, user);
+  if (Object.keys(merged).length === 0) return { ...DEFAULT_CONFIG };
+  try {
+    return validate({ ...DEFAULT_CONFIG, ...merged });
   } catch {
     return { ...DEFAULT_CONFIG };
   }

@@ -2,6 +2,7 @@ import { stripAnsi, isRateLimited, findRateLimitMessage, isRateLimitOptionsPromp
 import { parseResetTime, calculateWaitMs } from './time-parser.js';
 import { capturePane, sendKeys, sendKey, getPaneCommand, isProcessForeground } from './tmux.js';
 import { loadConfig } from './config.js';
+import { PATHS } from './paths.js';
 import { createLogger } from './logger.js';
 import { readStopFailureEvent, clearStopFailureEvent, isRetryableError, isUsageLimitError } from './events.js';
 import { writeStatus, clearStatus, sweepStaleStatus } from './status-file.js';
@@ -818,7 +819,7 @@ export async function startMonitor(pane, pid) {
       if (result === 'retried') await logger.info(`Sent retry message (attempt ${state.attempts})`);
       if (result === 'user-continued') await logger.info('User already continued. Attempt counter reset.');
       if (result === 'max-retries') await logger.warn(`Max retries (${config.maxRetries}) reached. Monitor still active but will not send further retries until rate limit clears.`);
-      if (result === 'skipped-not-claude') await logger.warn(`Foreground is "${state._lastForeground}", not Claude. Skipping send-keys. (Add to foregroundCommands in ~/.claude-auto-retry.json if this is wrong)`);
+      if (result === 'skipped-not-claude') await logger.warn(`Foreground is "${state._lastForeground}", not Claude. Skipping send-keys. (Add to foregroundCommands in ${PATHS.config} if this is wrong)`);
       if (result === 'event-ignored') await logger.warn(`Ignored StopFailure marker with non-retryable, non-usage-limit error="${state._ignoredEventError}".`);
       if (result === 'usage-limit-unresolved' && state._unresolvedMarkerTs !== lastLoggedUnresolvedMarkerTs) {
         lastLoggedUnresolvedMarkerTs = state._unresolvedMarkerTs;
