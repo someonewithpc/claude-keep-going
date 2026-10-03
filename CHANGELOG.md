@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-03
+
 ### Added
 - **Weekly-limit model fallback** (`modelFallback`, off by default). On a limit scoped to
   one model ("You've hit your Opus limit"), the monitor sends `/model <fallback>` from
