@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-03
+
 ### Added
 - **Idle compaction (`compact` config block, off by default).** The monitor sends
   `/compact` once a session's turn has ended, nothing is running in the background, no
