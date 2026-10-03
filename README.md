@@ -1,8 +1,12 @@
 # claude-keep-going
 
-> Keep unattended Claude Code sessions going through usage limits and API errors.
+> Keep unattended Claude Code sessions going through usage limits, API errors and full contexts.
 
-When Claude Code shows *"5-hour limit reached - resets 3pm"*, this tool waits for the reset and sends "continue". You come back to find your work done.
+Leave Claude Code working overnight and something usually stops it: a usage limit, an
+overloaded API, a dropped connection, a context that needs compacting. This tool watches
+the session from a tmux pane and does what you would do if you were there. It waits for
+the reset and sends "continue", backs off and retries, compacts before the prompt cache
+expires, and switches models when one model's weekly limit is used up.
 
 No dependencies, and the `claude` command works the same as before.
 
@@ -10,60 +14,82 @@ No dependencies, and the `claude` command works the same as before.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
 
-This is a fork of [cheapestinference/claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry), renamed because it is growing past retries. Upstream has open PRs waiting since July 2026, so changes land here instead.
+This is a fork of [cheapestinference/claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry),
+renamed because it does more than retry now.
 
 ---
 
-## The Problem
+## The problem
 
-You're in the middle of a complex task with Claude Code. After a while, you see:
+You're in the middle of a long task with Claude Code. After a while, you see:
 
 ```
 You've hit your limit · resets 3pm (Europe/Dublin)
 ```
 
-Claude stops. You have to wait hours, come back, and type "continue". If you're running long tasks overnight or while AFK, this kills your productivity.
+Claude stops. You have to wait hours, come back, and type "continue". Overnight that means
+a night of lost work, and in the morning the prompt cache has expired, so your first
+message re-sends the whole context cold.
 
-## The Solution
+## Install
+
+With npm:
 
 ```bash
 npm i -g claude-keep-going
-claude-keep-going install
+claude-keep-going install          # shell wrapper, tmux, and moving files from an older install
+claude-keep-going install-hook     # hooks: needed for compaction, native defer, model fallback
+claude-keep-going install-timer    # optional: re-arm monitors every 5 minutes
 ```
 
-That's it. Type `claude` as you always do. When the rate limit hits, the tool:
+With Nix, the flake has NixOS and home-manager modules that do all three declaratively:
 
-1. Detects the rate limit message in the terminal
-2. Parses the reset time (timezone-aware)
-3. Waits until the limit resets + 60s margin
-4. Verifies Claude is still the foreground process
-5. Sends "continue" automatically
+```nix
+inputs.claude-keep-going.url = "github:someonewithpc/claude-keep-going";
+# then, with claude-keep-going.nixosModules.default (or .homeManagerModules.default) imported:
+programs.claude-keep-going.enable = true;
+```
 
-You come back to find your task completed.
+See [NixOS / Nix](#nixos--nix) for the options.
 
-## How it Works
+Then type `claude` as you always do. When a usage limit hits, the tool:
+
+1. Reads the reset time (from the banner, or the statusline when the banner has none)
+2. Waits until the reset plus a margin (`marginSeconds`, 60 s)
+3. Gives Claude Code's own auto-continue a chance to resume first, when the hooks are installed
+4. Checks that the API is reachable and Claude is still the foreground process
+5. Sends "continue"
+
+## How it works
 
 ```
 You type "claude"
        │
        ▼
-  Shell function (injected in .bashrc/.zshrc)
+  Shell function (from install, or the Nix module)
        │
-       ├─ Already in tmux? ──▶ Start background monitor
-       │                        Launch claude with full TUI
+       ├─ Already in tmux? ──▶ Start a background monitor
+       │                        Launch claude with the full TUI
        │
-       └─ Not in tmux? ──▶ Create tmux session transparently
+       └─ Not in tmux? ──▶ Create a tmux session
                              Launch claude + monitor inside
                              Attach (looks the same to you)
 
-  MONITOR (background, ~0% CPU):
+  Claude Code hooks ──▶ markers: turn ended, turn started, background work,
+                        permission prompts, API errors, compactions, model switches
+  statusLine tap    ──▶ snapshot: cache expiry, usage resets, context size, model
+
+  MONITOR (background, ~0% CPU), every 5 seconds:
        │
-       ├─ Polls tmux pane every 5 seconds
-       ├─ Detects rate limit text
-       ├─ Parses reset time from message
-       ├─ Waits until reset + safety margin
-       ├─ Verifies Claude is still the foreground process
-       └─ Sends "continue" via tmux send-keys
+       ├─ Reads the markers and snapshot, and the pane where needed
+       ├─ Usage limit: wait for the reset, let native auto-continue go first, send "continue"
+       ├─ One model's limit: /model <fallback>, continue, switch back after the reset
+       ├─ API overload: exponential backoff with jitter, then retry
+       ├─ Safeguard false positive or interrupted stream: bounded re-send
+       ├─ Idle with a big prompt: /compact shortly before the cache expires
+       └─ Types only when Claude is in the foreground and the input box is empty
+
+  reconcile (timer) ──▶ re-arms a monitor for any claude pane that lost one
 ```
 
 ### Why tmux?
@@ -72,22 +98,24 @@ When you disconnect (SSH drops, close terminal, laptop sleeps), **tmux keeps run
 
 ## Features
 
-- **Zero workflow change** — same `claude` command, same TUI, same everything
-- **Works with and without tmux** — auto-creates tmux session if you're not already in one
-- **Auto-installs tmux** if missing (apt, dnf, brew, pacman, apk)
-- **Timezone-aware** — parses reset times with full IANA timezone support (including half-hour offsets)
-- **DST-safe** — iterative offset correction handles daylight saving transitions
-- **Safe send-keys** — verifies Claude is still the foreground process before injecting text
-- **Self-healing coverage** — `reconcile` re-arms monitors for any live `claude` session that lost one; an optional timer (`systemd --user` on Linux, launchd on macOS) runs it automatically ([details](#keeping-monitors-alive))
-- **Overload backoff** — detects sustained API overload (`429/500/502/503/504/529`) and retries on a configurable exponential backoff with jitter and a cumulative-wait cap, distinct from the usage-reset path ([details](#overload-backoff))
-- **Safeguard retry** — auto-continues past an AUP-safeguard false-positive (often transient), capped at a few tries so a sticky flag can't loop ([details](#safeguard-retry))
-- **Interrupted-stream resume** — picks the work back up when a laptop suspend or a dropped connection truncates a response mid-turn and leaves the session parked at an idle prompt ([details](#interrupted-stream-resume))
-- **Near-limit wrap-up nudge** — when Claude Code winds the turn down at ~95% of the 5-hour window ("Approaching your 5-hour usage limit — Claude will wrap up the current step") and parks the session at an idle prompt with no limit banner, sends one `continue` so the work runs on to the real limit, where the usage wait takes over ([details](#near-limit-wrap-up-nudge))
-- **tmux status bar indicator** — see at a glance whether a pane is being monitored, waiting on a reset, backing off from overload, or has given up ([details](#tmux-status-bar-indicator))
-- **`--print` mode support** — buffers output, retries cleanly for piped/scripted usage
-- **Configurable** — retry count, wait margin, custom patterns, retry message
-- **Config validation** — bad config values fall back to safe defaults instead of crashing
-- **Zero dependencies** — pure Node.js, no `node_modules`
+- **Same workflow:** the same `claude` command and TUI. The tool creates a tmux session if you aren't in one, and installs tmux if it's missing (apt, dnf, brew, pacman, apk).
+- **Usage-limit continue:** parses reset times with IANA timezones and DST, falls back to the statusline's reset time when the banner has none, and drives the `/rate-limit-options` menu to "Stop and wait" ([details](#after-a-usage-limit-resets)).
+- **Claude Code's own auto-continue goes first:** with the hooks installed, the monitor gives it a grace period and steps in when it doesn't act, logging `native-missed` ([details](#claude-codes-own-auto-continue)).
+- **Network check:** after a resume from suspend, holds the continue until the API is reachable ([details](#network-check)).
+- **Weekly-limit model fallback (opt-in):** on "You've hit your Opus limit", switches to another model and back after the reset ([details](#weekly-limit-model-fallback)).
+- **Idle compaction (opt-in):** sends `/compact` to an idle session shortly before its prompt cache expires, when the prompt is big or the session asked with `claude-keep-going request compact` ([details](#idle-compaction)).
+- **Overload backoff:** retries sustained API overload (`429/500/502/503/504/529`) on exponential backoff with jitter and a cumulative-wait cap ([details](#overload-backoff)).
+- **Safeguard retry:** continues past an AUP-safeguard false positive, a few times at most ([details](#safeguard-retry)).
+- **Interrupted-stream resume:** picks the work back up when a suspend or dropped connection truncated a response ([details](#interrupted-stream-resume)).
+- **Near-limit wrap-up nudge:** when Claude Code winds a turn down at ~95% of the 5-hour window, sends one `continue` so work runs on to the real limit ([details](#near-limit-wrap-up-nudge)).
+- **Hook signals and statusline tap:** turn state, background work and cache timing come from Claude Code's hooks and statusline input instead of the screen ([details](#hook-signals-and-the-statusline-tap)).
+- **Self-healing coverage:** `reconcile` re-arms monitors for any live `claude` pane that lost one, on a timer if you want ([details](#keeping-monitors-alive)).
+- **Status badge:** in the tmux status bar or the Claude Code statusline (`status --pane`), shows whether a pane is monitored, waiting, backing off, compacting soon, or has given up ([details](#tmux-status-bar-indicator)).
+- **`--print` mode:** buffers output and retries cleanly for piped and scripted use.
+- **XDG paths:** config in `~/.config`, logs in `~/.local/state`, runtime files in `$XDG_RUNTIME_DIR`, with `migrate` for files from an older install ([details](#where-files-live)).
+- **Nix flake:** NixOS and home-manager modules with a `settings` option ([details](#nixos--nix)).
+- **Validated config:** bad values fall back to defaults instead of crashing.
+- **Zero dependencies:** pure Node.js, no `node_modules`.
 
 ## Messages Detected (verbatim)
 
@@ -177,8 +205,9 @@ regexes; the built-in detection keeps the chrome-aware discipline.
 
 Optional. Create `~/.config/claude-keep-going/config.json` (or under `$XDG_CONFIG_HOME`
 if you set it). A system-wide file at `/etc/xdg/claude-keep-going/config.json` (each
-`$XDG_CONFIG_DIRS` entry) is read first, and your file overrides it key by key, including
-keys inside blocks like `overload`.
+`$XDG_CONFIG_DIRS` entry) is read first, and your file overrides it key by key, one level
+deep: inside a block like `overload` your keys win one by one, but a nested object such as
+`compact.settle` or `modelFallback.map` replaces the system one whole.
 
 ```json
 {
@@ -199,8 +228,16 @@ keys inside blocks like `overload`.
 | `fallbackWaitHours` | `5` | Wait time if reset time can't be parsed |
 | `retryMessage` | `"Continue where..."` | Message sent to Claude on retry |
 | `customPatterns` | `[]` | Additional regex patterns to detect rate limits |
+| `foregroundCommands` | `node, claude, npx, tsx, bun, deno` | Pane commands that count as "Claude is in the foreground" when the `ps` foreground check can't tell. Add yours if the log says it skipped a send because the foreground wasn't Claude. |
 
 All fields optional. Invalid values fall back to defaults automatically.
+
+Each feature has its own block, documented in its section:
+[`overload`](#overload-backoff), [`safeguard`](#safeguard-retry),
+[`streamInterrupted`](#interrupted-stream-resume),
+[`nearLimitWrapUp`](#near-limit-wrap-up-nudge), [`compact`](#idle-compaction),
+[`native`](#claude-codes-own-auto-continue), [`networkCheck`](#network-check) and
+[`modelFallback`](#weekly-limit-model-fallback).
 
 ### Launch wrapper
 
@@ -293,19 +330,29 @@ installed:
 { "native": { "usageLimit": "defer", "graceSeconds": 180 } }
 ```
 
-`"usageLimit": "ignore"` sends right away, as if the native feature didn't exist. Without
-the hooks the monitor can't see what Claude Code did, so it sends right away too.
+| Key | Default | Meaning |
+|---|---|---|
+| `usageLimit` | `"defer"` | `defer` lets Claude Code go first. `ignore` sends right away, as if the native feature didn't exist. |
+| `graceSeconds` | `180` | How long past the reset to wait for Claude Code before sending. |
+
+Without the hooks the monitor can't see what Claude Code did, so it sends right away.
 
 ### Network check
 
 After a resume from suspend the reset has usually passed but the network isn't back yet.
 Before sending the continue, the monitor checks that `api.anthropic.com:443` accepts a
-connection (or the proxy in `HTTPS_PROXY`), and holds while it doesn't, for up to
-`maxWaitMinutes`.
+TCP connection, or the proxy in `HTTPS_PROXY`/`ALL_PROXY` when one is set. It holds in
+15-second steps while that fails, and sends anyway after `maxWaitMinutes`.
 
 ```json
 { "networkCheck": { "enabled": true, "host": "api.anthropic.com", "port": 443, "maxWaitMinutes": 10 } }
 ```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Run the check at all. |
+| `host`, `port` | `api.anthropic.com`, `443` | Where to connect. `port` must be 1 to 65535. |
+| `maxWaitMinutes` | `10` | Give up checking and send anyway after this long. |
 
 ## Weekly-limit model fallback
 
@@ -318,8 +365,9 @@ message, and once the limit has reset it sends `/model <original>` at the next i
 { "modelFallback": { "enabled": true, "map": { "Opus": "sonnet" }, "switchBack": true } }
 ```
 
-`map` keys are the model names Claude Code puts in the banner ("Opus", "Sonnet"); values
-are what `/model` accepts. Limits that cover every model ("session limit", "weekly limit")
+`map` keys are the model names Claude Code puts in the banner ("Opus", "Sonnet"), matched
+without regard to case; values are what `/model` accepts (letters, digits and `. : - _ [ ]`;
+other entries are dropped). Limits that cover every model ("session limit", "weekly limit")
 still wait. The original model comes from the statusline tap or the `PostModelSwitch` hook;
 without either, the monitor switches back to the lowercased banner name (`/model opus`).
 
@@ -363,6 +411,7 @@ Configured under an `overload` block (shown with its defaults):
     "steadyStateSeconds": 300,
     "jitterPct": 15,
     "maxTotalWaitMinutes": 120,
+    "eventMaxAgeSeconds": 120,
     "retryMessage": "Continue where you left off.",
     "relaunchOnExit": false,
     "relaunchCommand": "claude --continue"
@@ -378,6 +427,7 @@ Configured under an `overload` block (shown with its defaults):
 | `steadyStateSeconds` | `300` | Wait once the `backoffSeconds` array is exhausted |
 | `jitterPct` | `15` | ±% jitter applied to every wait (clamped 0–100) |
 | `maxTotalWaitMinutes` | `120` | Cumulative-wait cap — give up loudly past this |
+| `eventMaxAgeSeconds` | `120` | Ignore a StopFailure marker older than this, so a recycled pane id can't replay an old failure |
 | `retryMessage` | `"Continue where you left off."` | Sent to Claude on each retry |
 | `relaunchOnExit` | `false` | See the gating decision below |
 | `relaunchCommand` | `"claude --continue"` | Command used by `relaunchOnExit` |
@@ -398,7 +448,8 @@ claude-keep-going install-hook                  # into $CLAUDE_CONFIG_DIR or ~/.
 claude-keep-going install-hook /path/to/config  # repeat per CLAUDE_CONFIG_DIR you use
 ```
 
-This adds a `StopFailure` hook (matcher `overloaded|server_error|rate_limit`) that
+Among the [other hooks](#hook-signals-and-the-statusline-tap), this adds a `StopFailure`
+hook (matcher `overloaded|server_error|rate_limit`) that
 writes a pane-keyed marker the monitor consumes — no terminal scraping, so it cannot
 false-positive on code or scrollback. Sessions launched via the wrapper **after**
 installing the hook use it automatically; the first marker latches event mode and
@@ -413,7 +464,7 @@ the architecture.
 > or, if that missed it, the session's transcript. This closes a race in the scrape-only
 > design: the limit notice is a one-shot transcript line, not a persistently-redrawn
 > banner, so a poll that misses its brief on-screen window could previously strand a
-> session with no retry for hours (#50).
+> session with no retry for hours (upstream issue #50).
 
 ### Gating decision (alive-at-prompt vs exited-to-shell)
 
@@ -511,10 +562,13 @@ fixed number of minutes after the turn.
 | `awayMinutes` | `null` | Only when no attached tmux client has had input for this long. No client attached counts as away. |
 | `minContextPercent` | `40` | Threshold for the `policy` trigger. |
 | `minContextTokens` | `null` | Also require this many tokens in the prompt for the `policy` trigger. |
-| `settle.mode` | `"before-expiry"` | `before-expiry` fires `marginSeconds` before the cache expires. `fixed` fires `minutes` after the turn ends: 4 suits the 5-minute cache, 55 the 1-hour one. |
+| `settle.mode` | `"before-expiry"` | `before-expiry` fires `settle.marginSeconds` before the cache expires, or `settle.minutes` after the turn when the expiry is unknown. `fixed` always fires `settle.minutes` after the turn ends: 4 suits the 5-minute cache, 55 the 1-hour one. |
+| `settle.marginSeconds` | `60` | How long before the cache expires to fire. |
+| `settle.minutes` | `4` | Delay after the turn for `fixed`, and the fallback for `before-expiry`. |
 | `focus` | `""` | Text appended to `/compact`, telling the summary what to keep. |
 | `matchLastMessage` | `false` | Also act when the last message mentions `/compact`, for sessions that ask a person instead of using `request`. |
 | `minIntervalMinutes` | `30` | Never compact twice within this long. |
+| `confirmMinutes` | `5` | How long to wait for the `PostCompact` hook before logging that the compaction didn't confirm. |
 
 The session asks with a command it can run through its Bash tool:
 
@@ -651,7 +705,7 @@ server-side Claude Code behavior with no user-facing switch (it is feature-flagg
 setting), so the tool handles the render instead.
 
 Seeing the notice at an idle prompt, the tool sends one `continue`. The session then either
-finishes its work or runs into the real limit, where the [usage wait](#how-it-works) takes
+finishes its work or runs into the real limit, where the [usage wait](#after-a-usage-limit-resets) takes
 over as usual. Unlike the retry families above this is not a bounded machine: the nudge
 renders as a user row under the notice, and a notice with a user row below it — yours or
 ours — belongs to a turn that has already been answered, so it is never nudged twice. The
@@ -758,13 +812,16 @@ different tmux server than the one in `$TMUX`.
 
 ```bash
 claude-keep-going install          # Install shell wrapper + tmux, offer to migrate old files
+                                   #   (--yes: migrate without asking, --no-migrate: skip)
 claude-keep-going migrate [--yes]  # Move files from ~/.claude-auto-retry* to XDG paths
-claude-keep-going uninstall        # Remove shell wrapper
-claude-keep-going status           # Show monitor activity + last log entries
+claude-keep-going uninstall        # Remove shell wrapper (see "Uninstall" for the rest)
+claude-keep-going status           # Show the last 10 lines of today's log
+claude-keep-going status --pane <id> [--socket <path>]  # Print the status badge for one pane
 claude-keep-going logs             # Tail today's log file in real-time
-claude-keep-going version          # Print version
+claude-keep-going version          # Print version (also --version, -v)
 
-# Event-driven overload detection (optional; see "Overload backoff")
+# Hooks and statusline (see "Hook signals and the statusline tap"). Recommended;
+# compaction, native defer and model-fallback switch-back need them.
 claude-keep-going install-hook [dir]    # Install the hooks into a config dir (--dump: also record payloads)
 claude-keep-going uninstall-hook [dir]  # Remove them (--dump: only the recording)
 claude-keep-going statusline-tap -- <cmd...>  # statusLine wrapper, see "Hook signals"
@@ -786,8 +843,9 @@ full setup is non-interactive:
 
 ```bash
 npm install -g claude-keep-going
-claude-keep-going install        # shell wrapper (+ tmux if missing)
-claude-keep-going install-hook   # recommended: event-driven, scrape-free overload detection
+claude-keep-going install --yes  # shell wrapper (+ tmux if missing), migrate old files
+claude-keep-going install-hook   # recommended: API-error and turn-state hooks
+claude-keep-going install-timer  # optional: re-arm monitors every 5 minutes
 ```
 
 Notes for agents:
@@ -800,7 +858,12 @@ Notes for agents:
   `~/.config/claude-keep-going/config.json` (see [Configuration](#configuration)); invalid values fall
   back to defaults instead of crashing.
 - If the user runs multiple `CLAUDE_CONFIG_DIR`s, repeat `claude-keep-going install-hook <path>` per dir.
-- Clean removal: `claude-keep-going uninstall` and `claude-keep-going uninstall-hook`.
+- Compaction timing and statusline resets need the
+  [statusline tap](#hook-signals-and-the-statusline-tap): prefix the user's
+  `statusLine.command` with `claude-keep-going statusline-tap -- `.
+- If idle compaction is on, a line in the user's `CLAUDE.md` lets you ask for it yourself
+  (see [Idle compaction](#idle-compaction)).
+- Clean removal: see [Uninstall](#uninstall). It takes more than `uninstall`.
 
 ## Keeping monitors alive
 
@@ -845,7 +908,7 @@ pruned, since staleness can't be detected). Prefer the PID form; you can also ha
 | macOS | `brew` | Fully supported |
 | Arch Linux | `pacman` | Fully supported |
 | Alpine | `apk` | Fully supported |
-| Windows | — | **Not supported natively** — the tool drives a tmux pane, which Windows does not have. Use WSL2 (Ubuntu), where it works as on Linux. A native backend via a tmux-compatible multiplexer is being discussed in [#79](https://github.com/someonewithpc/claude-keep-going/issues/79). |
+| Windows | — | **Not supported natively** — the tool drives a tmux pane, which Windows does not have. Use WSL2 (Ubuntu), where it works as on Linux. A native backend via a tmux-compatible multiplexer is being discussed upstream in [cheapestinference/claude-auto-retry#79](https://github.com/cheapestinference/claude-auto-retry/issues/79). |
 
 ### Requirements
 
@@ -872,9 +935,11 @@ The repo is also a flake, for anyone who'd rather manage this declaratively than
 
 Both modules install the package, wire up the shell wrapper (bash and zsh, same
 runtime-branching script described above), and manage the reconcile timer
-(`systemd --user` on Linux, a `launchd` agent under home-manager on Darwin) and the
-`StopFailure` hook declaratively. No imperative `install`/`install-hook`/`install-timer`
-step, and no shell-rc file to keep mutable for it.
+(`systemd --user` on Linux, a `launchd` agent under home-manager on Darwin) and the hooks
+(StopFailure, Stop, UserPromptSubmit, Notification, PostCompact, PostModelSwitch)
+declaratively. They also run `migrate --yes` for files from an older install. No imperative
+`install`/`install-hook`/`install-timer` step, and no shell-rc file to keep mutable for it.
+The `statusline-tap` prefix on your `statusLine` command is still yours to add.
 
 **NixOS system module:**
 
@@ -938,7 +1003,8 @@ claude -p "Generate a JSON schema" | jq .
 |---|---|
 | Config | `$XDG_CONFIG_HOME/claude-keep-going/config.json`, default `~/.config/...` |
 | Logs | `$XDG_STATE_HOME/claude-keep-going/logs/`, default `~/.local/state/...` |
-| Status files, StopFailure markers, reconcile lock and exclude list, env snapshots | `$XDG_RUNTIME_DIR/claude-keep-going/` |
+| Status files, hook markers (`events/`), statusline snapshots (`statusline/`), reconcile lock and exclude list, env snapshots | `$XDG_RUNTIME_DIR/claude-keep-going/` |
+| Raw hook payloads, only with `install-hook --dump` | `$XDG_STATE_HOME/claude-keep-going/hook-dump.jsonl` |
 
 Without `XDG_RUNTIME_DIR` (macOS, some cron or `su` sessions) the runtime files go to
 `$TMPDIR/claude-keep-going-<uid>/`, which the tool refuses to use unless you own it.
@@ -986,18 +1052,35 @@ Logs rotate daily. Files older than 7 days are cleaned automatically.
 
 ## Uninstall
 
+Undo each install step before removing the package, or the leftovers point at a binary
+that no longer exists:
+
 ```bash
-claude-keep-going uninstall
+claude-keep-going uninstall-hook   # once per CLAUDE_CONFIG_DIR you installed into
+claude-keep-going uninstall-timer
+claude-keep-going uninstall        # removes the shell function from your rc files
 npm uninstall -g claude-keep-going
 ```
 
-This removes the shell function from your rc files. tmux is left installed.
+Then, by hand:
+
+- Remove `claude-keep-going statusline-tap -- ` from your `statusLine.command`, or the
+  statusline stops rendering.
+- Remove any `claude-keep-going request compact` line from `CLAUDE.md`.
+- Optionally delete `~/.config/claude-keep-going`, `~/.local/state/claude-keep-going` and
+  `$XDG_RUNTIME_DIR/claude-keep-going`.
+
+With Nix, run `claude-keep-going uninstall-hook` before disabling the module. Disabling it
+removes the package, the timer and the shell function, but not the hook entries in
+`~/.claude/settings.json`, which would point at a store path that gets garbage-collected.
+
+tmux is left installed.
 
 ## Known Limitations
 
 1. **Retry message context** — The retry message is sent as plain text. If Claude was mid-confirmation or in a special input state, it may not interpret it as a continuation. You can customize the message via config.
 
-2. **Node version lock** — The launcher path is resolved at install time. If you switch Node versions with nvm, re-run `claude-keep-going install`.
+2. **Node version lock** — `install`, `install-hook` and `install-timer` record the Node path at install time. If you switch Node versions with nvm, re-run all three. (The Nix modules re-apply them on every switch.)
 
 3. **tmux required** — The tool needs tmux to monitor terminal output and inject keystrokes. It auto-installs if missing, but requires sudo for system package managers.
 
@@ -1010,7 +1093,7 @@ Contributions are welcome! Here's how to get started:
 ```bash
 git clone https://github.com/someonewithpc/claude-keep-going.git
 cd claude-keep-going
-npm test            # Run all 128 tests
+npm test            # Run the test suite
 npm link            # Install locally for testing
 ```
 
@@ -1018,21 +1101,35 @@ npm link            # Install locally for testing
 
 ```
 claude-keep-going/
-├── bin/cli.js              # CLI: install, hook, reconcile, timer, status, logs, ...
+├── bin/
+│   ├── cli.js              # CLI: install, hooks, migrate, reconcile, timer, status, request, ...
+│   └── tmux-status.sh      # Status badge for the tmux status bar (POSIX sh)
 ├── src/
-│   ├── patterns.js         # Rate limit + overload detection + ANSI stripping
+│   ├── monitor.js          # Core monitoring loop: usage, overload, safeguard, resume, fallback
+│   ├── patterns.js         # Screen detection (limits, overload, input box) + ANSI stripping
 │   ├── time-parser.js      # Reset time parsing with timezone support
-│   ├── config.js           # Config loading + validation
+│   ├── compact.js          # Idle compaction decisions
+│   ├── model-fallback.js   # Model-scoped limit detection and fallback mapping
+│   ├── markers.js          # Turn-state hook markers (stop, prompt, notify, compact, model, request)
+│   ├── events.js           # StopFailure hook markers (overload and usage-limit triggers)
+│   ├── statusline.js       # statusline-tap snapshots (cache, usage resets, context)
+│   ├── status-file.js      # Per-pane status files + the badge
+│   ├── network.js          # API reachability check
+│   ├── transcript.js       # Reset time from the session transcript
+│   ├── paths.js            # XDG paths and the private runtime dir
+│   ├── migrate.js          # Moving files from ~/.claude-auto-retry*
+│   ├── config.js           # Config loading, layering and validation
 │   ├── logger.js           # File-based logging with rotation
 │   ├── tmux.js             # tmux command wrappers (execFile-based)
-│   ├── monitor.js          # Core monitoring loop + retry logic (usage + overload paths)
-│   ├── events.js           # StopFailure hook event channel (scrape-free overload trigger)
+│   ├── pane-key.js         # Pane and socket keys for file names
 │   ├── reconcile.js        # Re-arm monitors for all live claude panes + exclusion
 │   ├── launcher.js         # Process orchestration + signal forwarding
 │   └── wrapper.sh          # Shell function template
 ├── systemd/                # systemd --user units for the reconcile timer (Linux)
 ├── launchd/                # LaunchAgent plist for the reconcile timer (macOS)
-├── test/                   # tests across the src modules
+├── nix/, flake.nix         # Nix package, NixOS and home-manager modules
+├── test/                   # node:test suites and fixtures
+├── CHANGELOG.md, DESIGN-NOTES.md, llms.txt
 ├── package.json
 ├── LICENSE
 └── README.md
@@ -1087,13 +1184,13 @@ A: Yes. If you're not in tmux, it creates a tmux session transparently. You won'
 A: The monitor checks if the rate limit is still visible before sending keys. If you already continued, it resets and keeps watching.
 
 **Q: What if Claude exits while the monitor is waiting?**
-A: The monitor checks the Claude process every 30 seconds during the wait. If Claude exits, the monitor shuts down cleanly.
+A: The monitor checks that the Claude process is alive on every poll (every 5 seconds by default). If Claude exits, the monitor shuts down cleanly.
 
 **Q: Does it consume a lot of resources?**
 A: No. `tmux capture-pane` is extremely lightweight. The monitor uses ~0% CPU at a 5-second polling interval.
 
 **Q: Can it accidentally type into the wrong program?**
-A: The monitor verifies the foreground process is `node` or `claude` before sending keys. If you've switched to vim, bash, or anything else, it skips the retry.
+A: Before typing anything, the monitor checks that Claude is the pane's foreground process (the `ps` foreground flag, falling back to the command names in `foregroundCommands`) and, for compaction and model switch-back, that the input box is empty. If you've switched to vim, bash, or anything else, it skips the send.
 
 ## License
 

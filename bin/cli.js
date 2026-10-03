@@ -747,7 +747,7 @@ if (isMain) switch (command) {
   case 'logs': await cmdLogs(); break;
   case 'version': case '--version': case '-v': await cmdVersion(); break;
   default:
-    console.log('claude-keep-going - Auto-retry Claude Code on subscription rate limits\n');
+    console.log('claude-keep-going - Keep unattended Claude Code sessions going through usage limits,\nAPI errors and full contexts\n');
     console.log('Usage:');
     console.log('  claude-keep-going install            Install shell wrapper + tmux, and offer to');
     console.log('                                       move files from ~/.claude-auto-retry*');
@@ -778,7 +778,7 @@ if (isMain) switch (command) {
     console.log('                                       5 min (self-healing coverage; systemd --user');
     console.log('                                       on Linux, launchd LaunchAgent on macOS)');
     console.log('  claude-keep-going uninstall-timer    Remove the reconcile timer');
-    console.log('  claude-keep-going status             Show monitor status');
+    console.log('  claude-keep-going status             Show the last 10 lines of today\'s log');
     console.log('  claude-keep-going status --pane <id> [--socket <path>]');
     console.log('                                       Print the status badge for one pane');
     console.log('  claude-keep-going logs               Tail today\'s log');

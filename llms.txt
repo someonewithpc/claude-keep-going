@@ -1,13 +1,16 @@
 # claude-keep-going
 
-> Zero-dependency CLI that auto-retries Claude Code sessions. When a subscription
-> usage/session limit hits ("You've hit your session limit · resets 2am"), it waits
-> until the printed reset time and sends "continue" automatically. Sustained API
-> overload (`API Error: 529 … overloaded_error`, 500/502/503/504) gets exponential
-> backoff with jitter; safeguard/AUP false positives ("safeguards flagged this
-> message") get a bounded immediate re-send; and a stream truncated by a laptop
-> suspend or a dropped connection ("Your computer went to sleep mid-response") is
-> resumed. tmux-based, so it keeps working after you disconnect.
+> Zero-dependency CLI that keeps unattended Claude Code sessions going. When a
+> subscription usage/session limit hits ("You've hit your session limit · resets 2am"),
+> it waits until the reset and sends "continue", letting Claude Code's own
+> auto-continue go first when hooks are installed. Sustained API overload
+> (`API Error: 529 … overloaded_error`, 500/502/503/504) gets exponential backoff with
+> jitter; safeguard/AUP false positives get a bounded re-send; a stream truncated by a
+> suspend or dropped connection is resumed. Opt-in: idle compaction (`/compact` shortly
+> before the prompt cache expires, or when the session runs `claude-keep-going request
+> compact`) and weekly-limit model fallback ("You've hit your Opus limit" → `/model
+> sonnet`, and back after the reset). tmux-based, so it keeps working after you
+> disconnect.
 
 Install: `npm i -g claude-keep-going && claude-keep-going install` — then use `claude`
 as usual.
@@ -27,18 +30,20 @@ Key facts:
   pane tail so quoted errors in scrollback can't trigger a retry.
 - Timezone- and DST-aware reset-time parsing; `--print` mode supported; optional
   config at `~/.config/claude-keep-going/config.json` (XDG) with safe fallbacks for invalid values.
-- No runtime dependencies; Node >= 18; MIT license; 200+ tests.
+- No runtime dependencies; Node >= 18; MIT license; about 700 tests. A Nix flake with
+  NixOS and home-manager modules is included.
 
 ## Docs
 
 - [README](https://github.com/someonewithpc/claude-keep-going/blob/main/README.md): features, configuration, every error render detected
-- [DESIGN-NOTES](https://github.com/someonewithpc/claude-keep-going/blob/main/DESIGN-NOTES.md): architecture — StopFailure hook event channel vs. terminal scraper, overload backoff design
+- [DESIGN-NOTES](https://github.com/someonewithpc/claude-keep-going/blob/main/DESIGN-NOTES.md): upstream architecture notes — StopFailure hook event channel vs. terminal scraper, overload backoff design
 - [CHANGELOG](https://github.com/someonewithpc/claude-keep-going/blob/main/CHANGELOG.md): release history
 
 ## Install for a user (agent-friendly, non-interactive)
 
 - `npm install -g claude-keep-going`
-- `claude-keep-going install` — shell wrapper (+ tmux if missing); takes effect in new shells
-- `claude-keep-going install-hook` — recommended: event-driven overload detection via Claude Code's StopFailure hook
-- Verify: `claude-keep-going status`
-- Remove: `claude-keep-going uninstall` and `claude-keep-going uninstall-hook`
+- `claude-keep-going install --yes` — shell wrapper (+ tmux if missing), migrates files from an older install; takes effect in new shells
+- `claude-keep-going install-hook` — recommended: API-error and turn-state hooks; needed for compaction, native defer and model-fallback switch-back
+- Optional: `claude-keep-going install-timer`, and prefix the user's `statusLine.command` with `claude-keep-going statusline-tap -- `
+- Verify: `claude-keep-going logs`
+- Remove: `uninstall-hook`, `uninstall-timer`, `uninstall`, then `npm uninstall -g claude-keep-going`, and drop the `statusline-tap -- ` prefix (see the README's Uninstall section)
