@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`hook-dump.jsonl` is owner-only (0600).** It records prompts and Claude's replies,
+  and was created with the default umask, often world-readable.
+
 ## [0.14.1] - 2026-10-03
 
 ### Fixed

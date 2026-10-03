@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, mkdir, unlink, appendFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, appendFile, chmod } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -397,7 +397,9 @@ async function cmdHookDump() {
       _kg_pane: process.env.CLAUDE_KEEP_GOING_PANE ?? null,
     };
     await mkdir(dirname(HOOK_DUMP_FILE), { recursive: true });
-    await appendFile(HOOK_DUMP_FILE, JSON.stringify(record) + '\n');
+    // Payloads carry prompts and Claude's replies: owner-only, whatever the umask.
+    await appendFile(HOOK_DUMP_FILE, JSON.stringify(record) + '\n', { mode: 0o600 });
+    await chmod(HOOK_DUMP_FILE, 0o600);
   } catch { /* never break the host session */ }
   process.exit(0);
 }
