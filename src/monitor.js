@@ -3,7 +3,7 @@ import { parseResetTime, calculateWaitMs } from './time-parser.js';
 import { capturePane, sendKeys, sendKey, getPaneCommand, isProcessForeground, lastClientActivity } from './tmux.js';
 import { loadConfig } from './config.js';
 import { createCompactState, compactTick } from './compact.js';
-import { readMarker, clearMarker } from './markers.js';
+import { readMarker, clearMarker, turnState } from './markers.js';
 import { readStatuslineSnapshot, fullWindowReset } from './statusline.js';
 import { PATHS } from './paths.js';
 import { createLogger } from './logger.js';
@@ -134,6 +134,9 @@ function enterUsageWait(state, stripped, config, { fresh = false, viaUsageEvent 
   state._waitIsFallback = !parsed;
   state._gaveUp = false;
   state.viaUsageEvent = viaUsageEvent;
+  state.waitEnteredAt = Date.now();
+  state._nativeNoted = false;
+  state._nativeOutcome = null;
   if (fresh) state.attempts = 0;
   return 'waiting';
 }
@@ -171,6 +174,34 @@ async function correctWaitFromStatusline(state, tmuxAdapter, config) {
   state.waitUntil = full.resetsAt + config.marginSeconds * 1000;
   state._waitIsFallback = false;
   return `${full.window} usage window resets ${new Date(full.resetsAt).toLocaleString()} (from the statusline)`;
+}
+
+// Claude Code may resume the session on its own once the limit resets. With the hooks
+// installed, give it graceSeconds before sending our continue, and stand down if a new
+// turn started. Returns a result label to stop the tick here, or null to go on and send.
+async function deferToNative(state, tmuxAdapter, config) {
+  if (!config.native || config.native.usageLimit !== 'defer' || !tmuxAdapter.readMarker) return null;
+  const [stop, prompt, notify] = await Promise.all(['stop', 'prompt', 'notify'].map((k) => tmuxAdapter.readMarker(k)));
+  if (turnState({ stop, prompt }) === 'unknown' && !notify) return null;   // hooks not installed
+  const since = Math.max(state.waitEnteredAt || 0, state._lastRetrySentAt || 0);
+  if (prompt && prompt.ts > since) {
+    const nativeFired = notify && notify.ts > since && notify.type === 'quota_auto_resume_fired';
+    state.status = 'monitoring'; state.attempts = 0; state._gaveUp = false;
+    state._waitIsFallback = false; state.viaUsageEvent = false;
+    return nativeFired ? 'native-resumed' : 'user-continued';
+  }
+  if (notify && notify.ts > since && /^quota_auto_resume_(stale|disabled)$/.test(notify.type)) {
+    state._nativeOutcome = notify.type;
+    return null;
+  }
+  if (state.attempts > 0) return null;
+  if (Date.now() < state.waitUntil + config.native.graceSeconds * 1000) {
+    if (state._nativeNoted) return 'waiting';
+    state._nativeNoted = true;
+    return 'native-grace';
+  }
+  state._nativeOutcome = 'missed';
+  return null;
 }
 
 function correctUsageWait(state, stripped, config) {
@@ -309,6 +340,9 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
       return 'user-continued';
     }
 
+    const native = await deferToNative(state, tmuxAdapter, config);
+    if (native) return native;
+
     if (state.attempts >= config.maxRetries) {
       // Stay in 'waiting' to avoid re-detecting the stale rate limit on the next tick
       // and creating an infinite max-retries loop. This IS a give-up (no further
@@ -342,6 +376,7 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
     state.attempts++;
     state.waitUntil = Date.now() + 30_000;
     state._waitIsFallback = false;   // send cooldown, deliberately unrelated to the reset time
+    state._lastRetrySentAt = Date.now();
     await tmuxAdapter.sendKeys(pane, config.retryMessage);
     return 'retried';
   }
@@ -861,7 +896,13 @@ export async function startMonitor(pane, pid) {
         await logWait((secs, msg) => `Reset time re-read from the live banner: "${msg}". Wait shortened to ${secs}s.`);
       }
       if (result === 'menu-unreadable') await logger.warn('Rate-limit options menu detected but its layout could not be read; not pressing Enter (would risk confirming "Upgrade your plan"). Will recheck.');
-      if (result === 'retried') await logger.info(`Sent retry message (attempt ${state.attempts})`);
+      if (result === 'retried') {
+        await logger.info(`Sent retry message (attempt ${state.attempts})`);
+        if (state.attempts === 1 && state._nativeOutcome === 'missed') await logger.warn(`native-missed: Claude Code's own auto-continue did not resume the session within ${config.native.graceSeconds}s of the reset, so this tool sent the continue.`);
+        if (state.attempts === 1 && state._nativeOutcome && state._nativeOutcome !== 'missed') await logger.info(`Claude Code reported ${state._nativeOutcome} for its own auto-continue, so this tool sent the continue right away.`);
+      }
+      if (result === 'native-grace') await logger.info(`Limit reset. Giving Claude Code's own auto-continue ${config.native.graceSeconds}s to resume the session before sending a continue.`);
+      if (result === 'native-resumed') await logger.info("Claude Code's own auto-continue resumed the session. Nothing to send.");
       if (result === 'user-continued') await logger.info('User already continued. Attempt counter reset.');
       if (result === 'max-retries') await logger.warn(`Max retries (${config.maxRetries}) reached. Monitor still active but will not send further retries until rate limit clears.`);
       if (result === 'skipped-not-claude') await logger.warn(`Foreground is "${state._lastForeground}", not Claude. Skipping send-keys. (Add to foregroundCommands in ${PATHS.config} if this is wrong)`);

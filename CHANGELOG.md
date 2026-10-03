@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reset time from the statusline.** A usage wait with no reset time on screen (it fell
   back to `fallbackWaitHours`) now takes the reset of the full usage window from the
   statusline tap, even when that is later, as with a full weekly window.
+- **Claude Code's own auto-continue goes first** (`native.usageLimit`, default `defer`).
+  With the hooks installed, the first continue after a reset waits `native.graceSeconds`
+  (180) for Claude Code to resume the session itself, sends at once if it reports giving
+  up, and logs `native-missed` when it had to step in.
 
 ## [0.11.0] - 2026-10-03
 

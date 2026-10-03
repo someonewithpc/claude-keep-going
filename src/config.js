@@ -138,6 +138,15 @@ export const DEFAULT_COMPACT = {
   minIntervalMinutes: 30,
 };
 
+// Claude Code's own usage-limit auto-continue (setting autoContinueAtUsageLimit, behind
+// a server flag). defer: when the hooks are installed, give it graceSeconds past the
+// reset to resume the session before sending our own continue; act at once if it
+// reports that it gave up. ignore: behave as if it didn't exist.
+export const DEFAULT_NATIVE = {
+  usageLimit: 'defer',
+  graceSeconds: 180,
+};
+
 export const DEFAULT_CONFIG = {
   maxRetries: 5,
   pollIntervalSeconds: 5,
@@ -150,6 +159,7 @@ export const DEFAULT_CONFIG = {
   streamInterrupted: DEFAULT_STREAM_INTERRUPTED,
   nearLimitWrapUp: DEFAULT_NEAR_LIMIT_WRAP_UP,
   compact: DEFAULT_COMPACT,
+  native: DEFAULT_NATIVE,
 };
 
 
@@ -253,6 +263,13 @@ function validateCompact(raw) {
   return b;
 }
 
+function validateNative(raw) {
+  const b = { ...DEFAULT_NATIVE, ...(raw && typeof raw === 'object' ? raw : {}) };
+  b.usageLimit = ['defer', 'ignore'].includes(b.usageLimit) ? b.usageLimit : DEFAULT_NATIVE.usageLimit;
+  b.graceSeconds = validNumber(b.graceSeconds, 0, DEFAULT_NATIVE.graceSeconds);
+  return b;
+}
+
 function validate(cfg) {
   cfg.maxRetries = validNumber(cfg.maxRetries, 1, DEFAULT_CONFIG.maxRetries);
   cfg.pollIntervalSeconds = validNumber(cfg.pollIntervalSeconds, 1, DEFAULT_CONFIG.pollIntervalSeconds);
@@ -279,6 +296,7 @@ function validate(cfg) {
   cfg.streamInterrupted = validateBoundedRetry(cfg.streamInterrupted, DEFAULT_STREAM_INTERRUPTED);
   cfg.nearLimitWrapUp = validateNudge(cfg.nearLimitWrapUp, DEFAULT_NEAR_LIMIT_WRAP_UP);
   cfg.compact = validateCompact(cfg.compact);
+  cfg.native = validateNative(cfg.native);
   return cfg;
 }
 

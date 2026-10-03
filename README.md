@@ -275,6 +275,27 @@ the wait falls back to `fallbackWaitHours`. With the
 usage window is full and when it resets, and waits for that instead. A reset time on the
 screen still wins.
 
+### Claude Code's own auto-continue
+
+Claude Code 2.1.287 can continue a session after a usage limit on its own (the
+`autoContinueAtUsageLimit` setting, not yet enabled for every account). It gives up if the
+machine slept through the reset. To avoid sending a second continue on top of its own,
+and to cover it when it doesn't act, the monitor lets it go first when the hooks are
+installed:
+
+- After the reset (plus `marginSeconds`) it waits `native.graceSeconds` more.
+- A new turn starting in that time means the session resumed, and nothing is sent.
+- Claude Code reporting that it gave up (`quota_auto_resume_stale` or
+  `quota_auto_resume_disabled`) sends the continue at once.
+- If nothing happens, the continue goes out and the log says `native-missed`.
+
+```json
+{ "native": { "usageLimit": "defer", "graceSeconds": 180 } }
+```
+
+`"usageLimit": "ignore"` sends right away, as if the native feature didn't exist. Without
+the hooks the monitor can't see what Claude Code did, so it sends right away too.
+
 ## Overload backoff
 
 Separate from subscription rate limits, this fork also detects **sustained API
