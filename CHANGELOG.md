@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-10-03
+
 ### Changed
 - **The badge shows 🗜 only while a compaction is scheduled** (`🟢KG 🗜3m`). The armed
   marker from 0.13.2 (`🟢KG 🗜`, `🟢KG 🗜22:00`) is gone: with compaction on all day it was

@@ -1,6 +1,6 @@
 {
   "name": "claude-keep-going",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "description": "Keep unattended Claude Code sessions going: continue after usage limits, back off on API overload, compact idle sessions before the cache expires, and fall back to another model on a one-model limit",
   "type": "module",
   "bin": {
