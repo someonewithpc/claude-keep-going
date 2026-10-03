@@ -87,6 +87,15 @@ case "$status" in
     [ "$remain" -lt 0 ] && remain=0
     printf '🛡KG %ds' "$remain"
     ;;
+  interrupted)
+    interruptedWaitUntil=$(printf '%s' "$json" | grep -o '"interruptedWaitUntil":[0-9]*' | head -1 | grep -o '[0-9]*')
+    remain=$(( interruptedWaitUntil - now ))
+    [ "$remain" -lt 0 ] && remain=0
+    printf '🔁KG %ds' "$remain"
+    ;;
+  fallback)
+    printf '🔀KG'
+    ;;
   monitoring)
     compactAt=$(printf '%s' "$json" | grep -o '"compactAt":[0-9]*' | head -1 | grep -o '[0-9]*')
     armed=$(printf '%s' "$json" | grep -o '"compactArmed":true')

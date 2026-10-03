@@ -90,6 +90,8 @@ export function formatBadge(snap, now = Math.floor(Date.now() / 1000)) {
     }
     case 'overload': return `🟠KG ${remain(snap.overloadWaitUntil)}s`;
     case 'safeguard': return `🛡KG ${remain(snap.safeguardWaitUntil)}s`;
+    case 'interrupted': return `🔁KG ${remain(snap.interruptedWaitUntil)}s`;
+    case 'fallback': return '🔀KG';
     case 'monitoring': {
       // A compaction is scheduled: show the minutes left (see src/compact.js).
       if (typeof snap.compactAt === 'number' && snap.compactAt > now) return `🟢KG 🗜${Math.ceil((snap.compactAt - now) / 60)}m`;

@@ -24,7 +24,9 @@ const CASES = [
   ['compaction armed, window open', { status: 'monitoring', updatedAt: NOW, compactArmed: true, compactFrom: null }, '🟢KG 🗜'],
   ['compaction armed, window opens later', { status: 'monitoring', updatedAt: NOW, compactArmed: true, compactFrom: '22:00' }, '🟢KG 🗜22:00'],
   ['countdown wins over armed', { status: 'monitoring', updatedAt: NOW, compactAt: NOW + 60, compactArmed: true, compactFrom: null }, '🟢KG 🗜1m'],
-  ['unknown status', { status: 'interrupted', updatedAt: NOW }, ''],
+  ['resuming an interrupted stream', { status: 'interrupted', updatedAt: NOW, interruptedWaitUntil: NOW + 5 }, '🔁KG 5s'],
+  ['switching model', { status: 'fallback', updatedAt: NOW }, '🔀KG'],
+  ['unknown status', { status: 'something-new', updatedAt: NOW }, ''],
 ];
 
 describe('formatBadge', () => {

@@ -776,6 +776,8 @@ It prints:
 | Backing off from overload | `🟠KG 45s` |
 | Retrying past a safeguard/AUP false-positive | `🛡KG 8s` |
 | Given up — max retries/backoff cap reached; no further automatic action on this pane | `🔴KG` |
+| Resuming a truncated response | `🔁KG 5s` |
+| Switching model after a one-model limit | `🔀KG` |
 | No monitor for this pane, or the status file is stale (monitor process died without cleaning up) | *(nothing)* |
 
 `🔴KG` overrides whatever the underlying status would otherwise render. Several

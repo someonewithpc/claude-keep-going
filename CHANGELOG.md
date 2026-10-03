@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The badge no longer goes blank** while a truncated response is being resumed
+  (`🔁KG 5s`) or a model switch is in flight (`🔀KG`).
+
 ## [0.14.0] - 2026-10-03
 
 ### Added
