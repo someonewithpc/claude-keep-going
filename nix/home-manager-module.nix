@@ -20,6 +20,10 @@ in
       # works inside tmux, and reconcile/monitor both spawn the `tmux` binary directly.
       home.packages = [ cfg.package pkgs.tmux ];
 
+      xdg.configFile."claude-keep-going/config.json" = lib.mkIf (cfg.settings != { }) {
+        text = builtins.toJSON cfg.settings;
+      };
+
       programs.bash.initExtra = lib.mkIf cfg.shellIntegration.bash (common.wrapperScript cfg);
       programs.zsh.initContent = lib.mkIf cfg.shellIntegration.zsh (common.wrapperScript cfg);
 

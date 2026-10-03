@@ -724,9 +724,22 @@ step, and no shell-rc file to keep mutable for it.
 }
 ```
 
-See `nix/nixos-module.nix` / `nix/home-manager-module.nix` for the full option list
-(`package`, `shellIntegration.{bash,zsh}`, `installHook`, `reconcileTimer.{enable,
-startupDelay,interval}`).
+`settings` takes the same keys as the JSON config file. The NixOS module writes them to
+`/etc/xdg/claude-keep-going/config.json`, home-manager to
+`~/.config/claude-keep-going/config.json`:
+
+```nix
+programs.claude-keep-going = {
+  enable = true;
+  settings = {
+    maxRetries = 3;
+    overload.maxTotalWaitMinutes = 60;
+  };
+};
+```
+
+See `nix/common.nix` for the full option list (`package`, `settings`,
+`shellIntegration.{bash,zsh}`, `installHook`, `reconcileTimer.{enable,startupDelay,interval}`).
 
 ## `--print` Mode
 

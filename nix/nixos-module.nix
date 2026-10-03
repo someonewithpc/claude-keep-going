@@ -11,6 +11,10 @@ in
     # works inside tmux, and reconcile/monitor both spawn the `tmux` binary directly.
     environment.systemPackages = [ cfg.package pkgs.tmux ];
 
+    environment.etc."xdg/claude-keep-going/config.json" = lib.mkIf (cfg.settings != { }) {
+      text = builtins.toJSON cfg.settings;
+    };
+
     programs.bash.interactiveShellInit = lib.mkIf cfg.shellIntegration.bash (common.wrapperScript cfg);
     programs.zsh.interactiveShellInit = lib.mkIf cfg.shellIntegration.zsh (common.wrapperScript cfg);
 

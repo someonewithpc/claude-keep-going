@@ -19,7 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`claude-keep-going migrate`** moves the config and logs from `~/.claude-auto-retry*`,
   copying and comparing each file before removing the original, and deletes the rest of
   the old directory once no older monitor uses it. `install` offers it (`--yes`,
-  `--no-migrate`), and `reconcile` deletes the leftover directory later.
+  `--no-migrate`), and `reconcile` deletes the leftover directory later. The Nix modules
+  run `migrate --yes` themselves.
+- **Nix `settings` option.** `programs.claude-keep-going.settings` is written as the JSON
+  config: `/etc/xdg/claude-keep-going/config.json` from the NixOS module,
+  `~/.config/claude-keep-going/config.json` from home-manager.
 
 ## [0.8.2] - 2026-10-03
 

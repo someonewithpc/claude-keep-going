@@ -23,6 +23,24 @@
       };
     };
 
+    settings = lib.mkOption {
+      type = (pkgs.formats.json { }).type;
+      default = { };
+      example = lib.literalExpression ''
+        {
+          maxRetries = 3;
+          overload.maxTotalWaitMinutes = 60;
+        }
+      '';
+      description = ''
+        Configuration written as JSON for claude-keep-going (see the README's
+        Configuration section for the keys). The NixOS module writes it to
+        /etc/xdg/claude-keep-going/config.json, the home-manager module to
+        ~/.config/claude-keep-going/config.json. A user file still overrides the
+        system one key by key. Empty means no file is written.
+      '';
+    };
+
     installHook = lib.mkOption {
       type = lib.types.bool;
       default = true;
