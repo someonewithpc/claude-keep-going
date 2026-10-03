@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-03
+
 ### Fixed
 - **Event-driven usage-limit detection.** A `rate_limit` StopFailure marker is now
   consumed by the monitor: if the live pane scrape at marker time already caught the
