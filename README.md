@@ -307,6 +307,22 @@ connection (or the proxy in `HTTPS_PROXY`), and holds while it doesn't, for up t
 { "networkCheck": { "enabled": true, "host": "api.anthropic.com", "port": 443, "maxWaitMinutes": 10 } }
 ```
 
+## Weekly-limit model fallback
+
+Off by default. Some weekly limits apply to one model: "You've hit your Opus limit · resets
+Oct 9, 10am". Waiting means days without work, while other models still have room. With
+`modelFallback.enabled`, the monitor sends `/model <fallback>` and then the continue
+message, and once the limit has reset it sends `/model <original>` at the next idle prompt.
+
+```json
+{ "modelFallback": { "enabled": true, "map": { "Opus": "sonnet" }, "switchBack": true } }
+```
+
+`map` keys are the model names Claude Code puts in the banner ("Opus", "Sonnet"); values
+are what `/model` accepts. Limits that cover every model ("session limit", "weekly limit")
+still wait. The original model comes from the statusline tap or the `PostModelSwitch` hook;
+without either, the monitor switches back to the lowercased banner name (`/model opus`).
+
 ## Overload backoff
 
 Separate from subscription rate limits, this fork also detects **sustained API

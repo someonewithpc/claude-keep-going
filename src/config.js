@@ -157,6 +157,13 @@ export const DEFAULT_NETWORK_CHECK = {
   maxWaitMinutes: 10,
 };
 
+// Weekly-limit model fallback. map: banner model name -> what to pass to /model.
+export const DEFAULT_MODEL_FALLBACK = {
+  enabled: false,
+  map: { Opus: 'sonnet' },
+  switchBack: true,
+};
+
 export const DEFAULT_CONFIG = {
   maxRetries: 5,
   pollIntervalSeconds: 5,
@@ -171,6 +178,7 @@ export const DEFAULT_CONFIG = {
   compact: DEFAULT_COMPACT,
   native: DEFAULT_NATIVE,
   networkCheck: DEFAULT_NETWORK_CHECK,
+  modelFallback: DEFAULT_MODEL_FALLBACK,
 };
 
 
@@ -291,6 +299,16 @@ function validateNetworkCheck(raw) {
   return b;
 }
 
+function validateModelFallback(raw) {
+  const d = DEFAULT_MODEL_FALLBACK;
+  const b = { ...d, ...(raw && typeof raw === 'object' ? raw : {}) };
+  b.enabled = typeof b.enabled === 'boolean' ? b.enabled : d.enabled;
+  b.switchBack = typeof b.switchBack === 'boolean' ? b.switchBack : d.switchBack;
+  const map = b.map && typeof b.map === 'object' && !Array.isArray(b.map) ? b.map : d.map;
+  b.map = Object.fromEntries(Object.entries(map).filter(([k, v]) => k && typeof v === 'string' && /^[\w.:\[\]-]+$/.test(v)));
+  return b;
+}
+
 function validate(cfg) {
   cfg.maxRetries = validNumber(cfg.maxRetries, 1, DEFAULT_CONFIG.maxRetries);
   cfg.pollIntervalSeconds = validNumber(cfg.pollIntervalSeconds, 1, DEFAULT_CONFIG.pollIntervalSeconds);
@@ -319,6 +337,7 @@ function validate(cfg) {
   cfg.compact = validateCompact(cfg.compact);
   cfg.native = validateNative(cfg.native);
   cfg.networkCheck = validateNetworkCheck(cfg.networkCheck);
+  cfg.modelFallback = validateModelFallback(cfg.modelFallback);
   return cfg;
 }
 

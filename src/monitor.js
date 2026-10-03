@@ -6,6 +6,7 @@ import { createCompactState, compactTick } from './compact.js';
 import { readMarker, clearMarker, turnState } from './markers.js';
 import { readStatuslineSnapshot, fullWindowReset } from './statusline.js';
 import { connectTarget, canConnect } from './network.js';
+import { scopedModelFromBanner, fallbackTarget } from './model-fallback.js';
 import { PATHS } from './paths.js';
 import { createLogger } from './logger.js';
 import { readStopFailureEvent, clearStopFailureEvent, isRetryableError, isUsageLimitError } from './events.js';
@@ -166,6 +167,36 @@ function enterUsageWait(state, stripped, config, { fresh = false, viaUsageEvent 
 //     being a candidate and the correction logs exactly once.
 const WAIT_CORRECTION_EPSILON_MS = 1000;
 
+// A limit on one model (see src/model-fallback.js): switch models instead of waiting.
+// Returns a result label when it acted, null to fall through to the usage wait.
+async function startModelFallback(state, stripped, tmuxAdapter, pane, config) {
+  const message = findRateLimitMessage(stripped, config.customPatterns, RATE_LIMIT_TAIL_LINES);
+  const model = scopedModelFromBanner(message);
+  // The banner for the model we already switched away from, still in the tail.
+  if (state.fallback && state.fallback.active && model && model.toLowerCase() === state.fallback.from.toLowerCase()) {
+    return 'monitoring';
+  }
+  const to = fallbackTarget(config, model);
+  if (!to) return null;
+  const fg = await checkForeground(tmuxAdapter, pane, config);
+  if (!fg.ok) { state._lastForeground = fg.fg; return 'skipped-not-claude'; }
+  const parsed = parseResetTime(message);
+  const snap = tmuxAdapter.readStatusline ? await tmuxAdapter.readStatusline() : null;
+  state.fallback = {
+    active: true,
+    from: model,
+    to,
+    // Replaced by PostModelSwitch's from_model when the hook reports it.
+    original: (snap && snap.model && snap.model.id) || model.toLowerCase(),
+    resetAt: Date.now() + calculateWaitMs(parsed, config.marginSeconds, config.fallbackWaitHours),
+    switchedAt: Date.now(),
+    banner: message,
+  };
+  state.status = 'fallback';
+  await tmuxAdapter.sendKeys(pane, `/model ${to}`);
+  return 'model-fallback-switched';
+}
+
 // A fallback wait (no reset time on screen) corrected from the statusline tap, which
 // knows which usage window is full and when it resets. Unlike the banner correction this
 // may also push the wake-up later: a full weekly window outlasts the 5-hour fallback,
@@ -303,6 +334,21 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
     enterUsageWait(state, stripped, config, { fresh: true });
     state._menuCooldownUntil = Date.now() + cooldown;
     return 'menu-confirmed';
+  }
+
+  if (state.status === 'fallback') {
+    // /model was sent; continue once PostModelSwitch confirms it, or after 10 s without
+    // the hook.
+    const fb = state.fallback;
+    const switched = tmuxAdapter.readMarker ? await tmuxAdapter.readMarker('model') : null;
+    fb.confirmed = !!(switched && switched.ts >= fb.switchedAt);
+    if (switched && switched.ts >= fb.switchedAt && switched.from) fb.original = switched.from;
+    if (!fb.confirmed && Date.now() - fb.switchedAt < 10_000) return 'fallback-waiting';
+    const fg = await checkForeground(tmuxAdapter, pane, config);
+    if (!fg.ok) { state._lastForeground = fg.fg; return 'skipped-not-claude'; }
+    state.status = 'monitoring';
+    await tmuxAdapter.sendKeys(pane, config.retryMessage);
+    return 'model-fallback-continued';
   }
 
   if (state.status === 'waiting') {
@@ -621,6 +667,8 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
   // background-agent spam; the cost of dropping the gate is only a cosmetic re-detection
   // cycle (detect → wait → user-continued) that never actually injects.
   if (isRateLimited(stripped, config.customPatterns, RATE_LIMIT_TAIL_LINES)) {
+    const fallback = await startModelFallback(state, stripped, tmuxAdapter, pane, config);
+    if (fallback) return fallback;
     return enterUsageWait(state, stripped, config);
   }
 
@@ -789,6 +837,22 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
     }
   }
 
+  // Switch back to the original model once its limit has reset, at an idle prompt.
+  if (state.fallback && state.fallback.active && config.modelFallback && config.modelFallback.switchBack
+      && Date.now() >= state.fallback.resetAt) {
+    const idle = tmuxAdapter.readMarker
+      ? turnState({ stop: await tmuxAdapter.readMarker('stop'), prompt: await tmuxAdapter.readMarker('prompt') }) === 'idle'
+      : !isWorking(stripped);
+    if (idle && inputBoxEmpty(stripped)) {
+      const fg = await checkForeground(tmuxAdapter, pane, config);
+      if (fg.ok) {
+        state.fallback.active = false;
+        await tmuxAdapter.sendKeys(pane, `/model ${state.fallback.original}`);
+        return 'model-fallback-restored';
+      }
+    }
+  }
+
   // Idle compaction (src/compact.js). Needs the hook markers, so it only runs with an
   // adapter that can read them.
   if (config.compact && config.compact.enabled && tmuxAdapter.readMarker) {
@@ -923,6 +987,9 @@ export async function startMonitor(pane, pid) {
         if (state.attempts === 1 && state._nativeOutcome === 'missed') await logger.warn(`native-missed: Claude Code's own auto-continue did not resume the session within ${config.native.graceSeconds}s of the reset, so this tool sent the continue.`);
         if (state.attempts === 1 && state._nativeOutcome && state._nativeOutcome !== 'missed') await logger.info(`Claude Code reported ${state._nativeOutcome} for its own auto-continue, so this tool sent the continue right away.`);
       }
+      if (result === 'model-fallback-switched') await logger.info(`"${state.fallback.banner}": switched to ${state.fallback.to} instead of waiting. Will switch back to ${state.fallback.original} after ${new Date(state.fallback.resetAt).toLocaleString()}.`);
+      if (result === 'model-fallback-continued') await logger.info(`Sent the continue on ${state.fallback.to}${state.fallback.confirmed ? '' : ' (no PostModelSwitch hook seen, sent after 10 s)'}.`);
+      if (result === 'model-fallback-restored') await logger.info(`The ${state.fallback.from} limit has reset. Switched back to ${state.fallback.original}.`);
       if (result === 'native-grace') await logger.info(`Limit reset. Giving Claude Code's own auto-continue ${config.native.graceSeconds}s to resume the session before sending a continue.`);
       if (result === 'native-resumed') await logger.info("Claude Code's own auto-continue resumed the session. Nothing to send.");
       if (result === 'network-down') await logger.warn(`Limit reset, but ${config.networkCheck.host}:${config.networkCheck.port} is not reachable (resumed from suspend?). Waiting up to ${config.networkCheck.maxWaitMinutes} min for the network before sending the continue.`);

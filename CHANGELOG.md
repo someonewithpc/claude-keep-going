@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Weekly-limit model fallback** (`modelFallback`, off by default). On a limit scoped to
+  one model ("You've hit your Opus limit"), the monitor sends `/model <fallback>` from
+  `modelFallback.map` and continues, then switches back at an idle prompt once that limit
+  resets. Account-wide limits still wait.
+
 ## [0.12.0] - 2026-10-03
 
 ### Added
