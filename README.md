@@ -714,6 +714,8 @@ It prints:
 | Pane state | Indicator |
 |------------|-----------|
 | Actively monitoring | `🟢KG` |
+| Idle compaction is on and its window is open | `🟢KG 🗜` |
+| Idle compaction is on, window opens at 22:00 | `🟢KG 🗜22:00` |
 | Idle compaction scheduled, 3 minutes left | `🟢KG 🗜3m` |
 | Waiting on a usage-limit reset | `⏳KG 1h30m` |
 | Backing off from overload | `🟠KG 45s` |

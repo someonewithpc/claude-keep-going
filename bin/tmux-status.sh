@@ -89,8 +89,14 @@ case "$status" in
     ;;
   monitoring)
     compactAt=$(printf '%s' "$json" | grep -o '"compactAt":[0-9]*' | head -1 | grep -o '[0-9]*')
+    armed=$(printf '%s' "$json" | grep -o '"compactArmed":true')
+    from=$(printf '%s' "$json" | grep -o '"compactFrom":"[^"]*"' | head -1 | cut -d'"' -f4)
     if [ -n "$compactAt" ] && [ "$compactAt" -gt "$now" ]; then
       printf '🟢KG 🗜%dm' $(( (compactAt - now + 59) / 60 ))
+    elif [ -n "$armed" ] && [ -n "$from" ]; then
+      printf '🟢KG 🗜%s' "$from"
+    elif [ -n "$armed" ]; then
+      printf '🟢KG 🗜'
     else
       printf '🟢KG'
     fi

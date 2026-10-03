@@ -21,6 +21,9 @@ const CASES = [
   ['stale by its own interval', { status: 'monitoring', updatedAt: NOW - 50, pollIntervalSeconds: 30 }, '🟢KG'],
   ['compaction scheduled', { status: 'monitoring', updatedAt: NOW, compactAt: NOW + 150 }, '🟢KG 🗜3m'],
   ['compaction time passed', { status: 'monitoring', updatedAt: NOW, compactAt: NOW - 5 }, '🟢KG'],
+  ['compaction armed, window open', { status: 'monitoring', updatedAt: NOW, compactArmed: true, compactFrom: null }, '🟢KG 🗜'],
+  ['compaction armed, window opens later', { status: 'monitoring', updatedAt: NOW, compactArmed: true, compactFrom: '22:00' }, '🟢KG 🗜22:00'],
+  ['countdown wins over armed', { status: 'monitoring', updatedAt: NOW, compactAt: NOW + 60, compactArmed: true, compactFrom: null }, '🟢KG 🗜1m'],
   ['unknown status', { status: 'interrupted', updatedAt: NOW }, ''],
 ];
 

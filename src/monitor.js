@@ -2,7 +2,7 @@ import { stripAnsi, isRateLimited, findRateLimitMessage, isRateLimitOptionsPromp
 import { parseResetTime, calculateWaitMs } from './time-parser.js';
 import { capturePane, sendKeys, sendKey, getPaneCommand, isProcessForeground, lastClientActivity } from './tmux.js';
 import { loadConfig } from './config.js';
-import { createCompactState, compactTick } from './compact.js';
+import { createCompactState, compactTick, inWindow } from './compact.js';
 import { readMarker, clearMarker, turnState } from './markers.js';
 import { readStatuslineSnapshot, fullWindowReset } from './statusline.js';
 import { connectTarget, canConnect } from './network.js';
@@ -962,6 +962,10 @@ export async function startMonitor(pane, pid) {
         gaveUp: !!state._gaveUp,
         compactAt: state.compact && state.compact.fireAt && state.compact.handledStop !== state.compact.idleSince
           ? Math.floor(state.compact.fireAt / 1000) : 0,
+        // Idle compaction is on. compactFrom is when its window opens, null while open.
+        compactArmed: !!(config.compact && config.compact.enabled),
+        compactFrom: config.compact && config.compact.enabled && !inWindow(config.compact.window)
+          ? config.compact.window.start : null,
       }).catch(() => {});
       // The three results that announce a new wake-up time share one shape: seconds until
       // waitUntil, then consume the one-shot lastRateLimitMessage. Set-with-clear is an
