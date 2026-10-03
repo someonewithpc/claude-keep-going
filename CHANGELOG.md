@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Files live in XDG base directories.** Config is `~/.config/claude-keep-going/config.json`
+  (layered over `/etc/xdg/claude-keep-going/config.json`), logs are under
+  `~/.local/state/claude-keep-going/logs/`, and status files, StopFailure markers, the
+  reconcile lock and exclude list and env snapshots are under
+  `$XDG_RUNTIME_DIR/claude-keep-going/` with mode 0700. Without `XDG_RUNTIME_DIR` the
+  runtime files go to `$TMPDIR/claude-keep-going-<uid>/`, which is refused unless you own it.
+
+### Added
+- **`claude-keep-going migrate`** moves the config and logs from `~/.claude-auto-retry*`,
+  copying and comparing each file before removing the original, and deletes the rest of
+  the old directory once no older monitor uses it. `install` offers it (`--yes`,
+  `--no-migrate`), and `reconcile` deletes the leftover directory later.
+
 ## [0.8.2] - 2026-10-03
 
 ### Added

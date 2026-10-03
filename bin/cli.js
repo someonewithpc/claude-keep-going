@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { writeStopFailureEvent, isRetryableError, isUsageLimitError } from '../src/events.js';
 import { sweepStaleStatus } from '../src/status-file.js';
 import { PATHS } from '../src/paths.js';
+import { planMigration, applyMigration, describeStep, sweepLegacyDir, olderMonitorPids } from '../src/migrate.js';
 import { reconcile, excludeSelf, parseRunningMonitors, PGREP_LIST_FLAG } from '../src/reconcile.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -162,6 +163,11 @@ async function cmdInstall() {
     const { replacedLegacy } = await injectWrapper(rc, LAUNCHER_PATH);
     console.log(`Shell function added to ${rc}`);
     if (replacedLegacy) console.log(`  Removed the old claude-auto-retry block from ${rc}`);
+  }
+
+  if (!process.argv.includes('--no-migrate')) {
+    console.log('');
+    await runMigration({ yes: process.argv.includes('--yes') });
   }
 
   console.log(`\nInstalled! Launcher path: ${LAUNCHER_PATH}`);
@@ -473,6 +479,59 @@ async function cmdExcludeSelf() {
   } catch { /* no monitor running for this pane — nothing to stop */ }
 }
 
+// --- Migration from ~/.claude-auto-retry* ---
+
+function monitorProcessList() {
+  try {
+    return execFileSync('pgrep', [PGREP_LIST_FLAG, 'node .*src/monitor\\.js'], { encoding: 'utf-8' });
+  } catch { return ''; }   // pgrep exits 1 when nothing matches
+}
+
+function olderMonitorsRunning() {
+  return olderMonitorPids(monitorProcessList(), SRC_DIR).length > 0;
+}
+
+async function confirm(question) {
+  const { createInterface } = await import('node:readline/promises');
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(question)).trim().toLowerCase();
+    return answer === '' || answer === 'y' || answer === 'yes';
+  } finally { rl.close(); }
+}
+
+async function runMigration({ yes = false, quiet = false } = {}) {
+  const plan = await planMigration();
+  if (plan.steps.length === 0) {
+    if (!quiet) console.log('Nothing to migrate.');
+    return;
+  }
+  console.log('Found files from claude-auto-retry (or claude-keep-going before 0.9):');
+  for (const step of plan.steps) console.log(`  ${describeStep(step)}`);
+  if (!yes) {
+    if (!process.stdin.isTTY) {
+      console.log('Not running in a terminal, so nothing was moved. Run `claude-keep-going migrate --yes` to move them.');
+      return;
+    }
+    if (!(await confirm('Move them now? [Y/n] '))) {
+      console.log('Left them in place. Run `claude-keep-going migrate` later.');
+      return;
+    }
+  }
+  try {
+    for (const line of await applyMigration(plan, { olderMonitorsRunning: olderMonitorsRunning() })) {
+      console.log(`  ${line}`);
+    }
+  } catch (err) {
+    console.error(`migrate: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+async function cmdMigrate() {
+  await runMigration({ yes: process.argv.includes('--yes'), quiet: process.argv.includes('--quiet') });
+}
+
 // Re-arm a monitor for every live tmux pane running claude that isn't already covered.
 // Restores coverage after a crash/kill or for sessions started outside the wrapper.
 async function cmdReconcile() {
@@ -488,6 +547,13 @@ async function cmdReconcile() {
   if (result.locked) {
     console.log('Another reconcile is already running (lock held). Nothing to do.');
     return;
+  }
+  if (!dryRun) {
+    try {
+      if (await sweepLegacyDir({ olderMonitorsRunning: olderMonitorsRunning() })) {
+        console.log('Deleted the leftover ~/.claude-auto-retry directory.');
+      }
+    } catch { /* best effort */ }
   }
   const { armed, skipped } = result;
   if (armed.length === 0 && skipped.length === 0) {
@@ -526,6 +592,7 @@ if (isMain) switch (command) {
   case 'uninstall-hook': await cmdUninstallHook(); break;
   case HOOK_MARKER: await cmdStopFailureHook(); break;
   case 'reconcile': await cmdReconcile(); break;
+  case 'migrate': await cmdMigrate(); break;
   case 'exclude-self': await cmdExcludeSelf(); break;
   case 'install-timer': await cmdInstallTimer(); break;
   case 'uninstall-timer': await cmdUninstallTimer(); break;
@@ -535,7 +602,10 @@ if (isMain) switch (command) {
   default:
     console.log('claude-keep-going - Auto-retry Claude Code on subscription rate limits\n');
     console.log('Usage:');
-    console.log('  claude-keep-going install            Install shell wrapper + tmux');
+    console.log('  claude-keep-going install            Install shell wrapper + tmux, and offer to');
+    console.log('                                       move files from ~/.claude-auto-retry*');
+    console.log('                                       (--yes to move without asking, --no-migrate');
+    console.log('                                       to skip)');
     console.log('  claude-keep-going uninstall          Remove shell wrapper');
     console.log('  claude-keep-going install-hook [dir] Install the StopFailure hook (event-driven');
     console.log('                                       overload detection) into <dir>/settings.json');
@@ -544,6 +614,8 @@ if (isMain) switch (command) {
     console.log('  claude-keep-going reconcile          Re-arm a monitor for every live tmux');
     console.log('                                       claude session not already covered');
     console.log('                                       (--dry-run to preview). Run after a crash.');
+    console.log('  claude-keep-going migrate            Move config and logs from ~/.claude-auto-retry*');
+    console.log('                                       to the XDG directories (--yes: no prompt)');
     console.log('  claude-keep-going exclude-self       Keep THIS session unmonitored (durable,');
     console.log('                                       by claude PID; self-expires on exit)');
     console.log('  claude-keep-going install-timer      Install a timer that runs reconcile every');

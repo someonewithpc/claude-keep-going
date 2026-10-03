@@ -581,7 +581,8 @@ default `pollIntervalSeconds`) keeps the overload countdown responsive.
 ## CLI Commands
 
 ```bash
-claude-keep-going install          # Install shell wrapper + tmux
+claude-keep-going install          # Install shell wrapper + tmux, offer to migrate old files
+claude-keep-going migrate [--yes]  # Move files from ~/.claude-auto-retry* to XDG paths
 claude-keep-going uninstall        # Remove shell wrapper
 claude-keep-going status           # Show monitor activity + last log entries
 claude-keep-going logs             # Tail today's log file in real-time
@@ -755,6 +756,29 @@ The shell wrapper, the monitor, the hook, the reconcile timer and `tmux-status.s
 have to agree on these paths. If you set a custom `XDG_*` value in your shell rc, export it
 to the systemd user manager as well (`~/.config/environment.d/`), or the timer looks in
 the default place.
+
+Older versions kept everything under `~/.claude-auto-retry*`. See
+[Upgrading from claude-auto-retry](#upgrading-from-claude-auto-retry).
+
+## Upgrading from claude-auto-retry
+
+claude-keep-going is a fork of claude-auto-retry, and 0.8 also used the old file
+locations. `claude-keep-going install` finds them and asks before moving anything:
+
+- `~/.claude-auto-retry.json` moves to `~/.config/claude-keep-going/config.json`. If a new
+  config already exists, the old one stays put and you merge it by hand.
+- Log files move to `~/.local/state/claude-keep-going/logs/`. A log for the same day is
+  joined, old lines first.
+- The rest of `~/.claude-auto-retry/` (status files, markers, lock) is deleted. If monitors
+  from the older install are still running, it stays until they exit, and the next
+  `reconcile` run deletes it.
+
+Each file is copied and compared before the original is removed. Run
+`claude-keep-going migrate` to do this on its own, `--yes` to skip the question. Without a
+terminal and without `--yes`, nothing moves. The Nix modules run `migrate --yes` for you.
+
+`install` also removes the old `claude()` block from your rc files, `install-timer`
+replaces the old reconcile timer, and `install-hook` replaces the old StopFailure entry.
 
 ## Logging
 
