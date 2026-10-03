@@ -798,7 +798,7 @@ export function nearLimitWrapUpMatch(text) {
 //   ──────────────── session-title ─
 //   ❯\u00a0
 //   ────────────────
-//     /etc/nixos | Opus 5.5 | ...   (statusline, below the box)
+//     ~/my-project | Opus 5.5 | ...   (statusline, below the box)
 //
 // The top rule can end in the session title, so a rule is any line that starts with a
 // run of box-drawing dashes. Returns false when no box is found, so a caller about to type into the pane holds off
