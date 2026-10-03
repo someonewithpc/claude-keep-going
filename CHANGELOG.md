@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-03
+
 ### Changed
 - **Renamed to claude-keep-going.** This fork of claude-auto-retry has a new package name,
   binary, Nix option (`programs.claude-keep-going`), systemd and launchd unit names, and
