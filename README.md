@@ -296,6 +296,17 @@ installed:
 `"usageLimit": "ignore"` sends right away, as if the native feature didn't exist. Without
 the hooks the monitor can't see what Claude Code did, so it sends right away too.
 
+### Network check
+
+After a resume from suspend the reset has usually passed but the network isn't back yet.
+Before sending the continue, the monitor checks that `api.anthropic.com:443` accepts a
+connection (or the proxy in `HTTPS_PROXY`), and holds while it doesn't, for up to
+`maxWaitMinutes`.
+
+```json
+{ "networkCheck": { "enabled": true, "host": "api.anthropic.com", "port": 443, "maxWaitMinutes": 10 } }
+```
+
 ## Overload backoff
 
 Separate from subscription rate limits, this fork also detects **sustained API

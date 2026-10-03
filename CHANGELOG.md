@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   With the hooks installed, the first continue after a reset waits `native.graceSeconds`
   (180) for Claude Code to resume the session itself, sends at once if it reports giving
   up, and logs `native-missed` when it had to step in.
+- **Network check before the continue** (`networkCheck`). After a wait the monitor checks
+  that the API host (or the HTTPS proxy) accepts a connection before sending, holding for
+  up to 10 minutes, so a resume from suspend doesn't waste an attempt.
 
 ## [0.11.0] - 2026-10-03
 

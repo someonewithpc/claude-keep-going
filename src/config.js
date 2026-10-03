@@ -147,6 +147,16 @@ export const DEFAULT_NATIVE = {
   graceSeconds: 180,
 };
 
+// Before sending a continue after a wait, check that the API host accepts a TCP
+// connection, since right after a resume from suspend the network is often not back
+// yet. Gives up checking after maxWaitMinutes and sends anyway.
+export const DEFAULT_NETWORK_CHECK = {
+  enabled: true,
+  host: 'api.anthropic.com',
+  port: 443,
+  maxWaitMinutes: 10,
+};
+
 export const DEFAULT_CONFIG = {
   maxRetries: 5,
   pollIntervalSeconds: 5,
@@ -160,6 +170,7 @@ export const DEFAULT_CONFIG = {
   nearLimitWrapUp: DEFAULT_NEAR_LIMIT_WRAP_UP,
   compact: DEFAULT_COMPACT,
   native: DEFAULT_NATIVE,
+  networkCheck: DEFAULT_NETWORK_CHECK,
 };
 
 
@@ -270,6 +281,16 @@ function validateNative(raw) {
   return b;
 }
 
+function validateNetworkCheck(raw) {
+  const d = DEFAULT_NETWORK_CHECK;
+  const b = { ...d, ...(raw && typeof raw === 'object' ? raw : {}) };
+  b.enabled = typeof b.enabled === 'boolean' ? b.enabled : d.enabled;
+  b.host = typeof b.host === 'string' && b.host ? b.host : d.host;
+  b.port = Number.isInteger(b.port) && b.port > 0 && b.port < 65536 ? b.port : d.port;
+  b.maxWaitMinutes = validNumber(b.maxWaitMinutes, 0, d.maxWaitMinutes);
+  return b;
+}
+
 function validate(cfg) {
   cfg.maxRetries = validNumber(cfg.maxRetries, 1, DEFAULT_CONFIG.maxRetries);
   cfg.pollIntervalSeconds = validNumber(cfg.pollIntervalSeconds, 1, DEFAULT_CONFIG.pollIntervalSeconds);
@@ -297,6 +318,7 @@ function validate(cfg) {
   cfg.nearLimitWrapUp = validateNudge(cfg.nearLimitWrapUp, DEFAULT_NEAR_LIMIT_WRAP_UP);
   cfg.compact = validateCompact(cfg.compact);
   cfg.native = validateNative(cfg.native);
+  cfg.networkCheck = validateNetworkCheck(cfg.networkCheck);
   return cfg;
 }
 

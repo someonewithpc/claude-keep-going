@@ -2,11 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { processOneTick, createMonitorState } from '../src/monitor.js';
 import { DEFAULT_CONFIG } from '../src/config.js';
+import { connectTarget } from '../src/network.js';
 
 const BANNER = "You've hit your limit · resets 3pm (UTC)";
 const cfg = (over = {}) => ({ ...DEFAULT_CONFIG, ...over });
 
-function adapter({ markers = {}, statusline = null, pane = BANNER } = {}) {
+function adapter({ markers = {}, statusline = null, reachable = true, pane = BANNER } = {}) {
   const a = {
     _sent: [],
     capturePane: async () => pane,
@@ -16,7 +17,9 @@ function adapter({ markers = {}, statusline = null, pane = BANNER } = {}) {
     readMarker: async (k) => a.markers[k] ?? null,
     clearMarker: async () => {},
     readStatusline: async () => statusline,
+    apiReachable: async () => a.reachable,
     markers: { ...markers },
+    reachable,
   };
   return a;
 }
@@ -73,5 +76,34 @@ describe('deferring to Claude Code auto-continue', () => {
     const s = expiredWait();
     const a = adapter({ markers: { ...hooksSeen(), prompt: { ts: Date.now() - 7200_000 } } });
     assert.equal(await processOneTick(s, a, '%0', cfg(), () => true), 'native-grace');
+  });
+});
+
+describe('network check before the continue', () => {
+  it('holds while the API is unreachable and reports it once', async () => {
+    const s = expiredWait();
+    const a = adapter({ reachable: false });
+    assert.equal(await processOneTick(s, a, '%0', cfg(), () => true), 'network-down');
+    s.waitUntil = Date.now() - 1;
+    assert.equal(await processOneTick(s, a, '%0', cfg(), () => true), 'waiting');
+    assert.deepEqual(a._sent, []);
+    a.reachable = true;
+    s.waitUntil = Date.now() - 1;
+    assert.equal(await processOneTick(s, a, '%0', cfg(), () => true), 'retried');
+  });
+
+  it('sends anyway after maxWaitMinutes', async () => {
+    const s = expiredWait();
+    s._networkDownSince = Date.now() - 11 * 60_000;
+    const a = adapter({ reachable: false });
+    assert.equal(await processOneTick(s, a, '%0', cfg(), () => true), 'retried');
+  });
+
+  it('connects to the HTTPS proxy when one is set', () => {
+    const t = { host: 'api.anthropic.com', port: 443 };
+    assert.deepEqual(connectTarget(t, {}), t);
+    assert.deepEqual(connectTarget(t, { HTTPS_PROXY: 'http://proxy.lan:3128' }), { host: 'proxy.lan', port: 3128 });
+    assert.deepEqual(connectTarget(t, { https_proxy: 'http://proxy.lan' }), { host: 'proxy.lan', port: 80 });
+    assert.deepEqual(connectTarget(t, { HTTPS_PROXY: '::bad' }), t);
   });
 });

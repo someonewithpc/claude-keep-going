@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { createCompactState, compactTick } from './compact.js';
 import { readMarker, clearMarker, turnState } from './markers.js';
 import { readStatuslineSnapshot, fullWindowReset } from './statusline.js';
+import { connectTarget, canConnect } from './network.js';
 import { PATHS } from './paths.js';
 import { createLogger } from './logger.js';
 import { readStopFailureEvent, clearStopFailureEvent, isRetryableError, isUsageLimitError } from './events.js';
@@ -137,6 +138,8 @@ function enterUsageWait(state, stripped, config, { fresh = false, viaUsageEvent 
   state.waitEnteredAt = Date.now();
   state._nativeNoted = false;
   state._nativeOutcome = null;
+  state._networkDownSince = null;
+  state._networkNoted = false;
   if (fresh) state.attempts = 0;
   return 'waiting';
 }
@@ -204,6 +207,21 @@ async function deferToNative(state, tmuxAdapter, config) {
   return null;
 }
 
+// Right after a resume from suspend the network is often not back, and a continue sent
+// then just fails. Hold off while the API host refuses connections, for at most
+// maxWaitMinutes. Returns a result label while holding, else null.
+async function waitForNetwork(state, tmuxAdapter, config) {
+  const nc = config.networkCheck;
+  if (!nc || !nc.enabled || !tmuxAdapter.apiReachable) return null;
+  if (await tmuxAdapter.apiReachable()) { state._networkDownSince = null; return null; }
+  if (!state._networkDownSince) state._networkDownSince = Date.now();
+  if (Date.now() - state._networkDownSince >= nc.maxWaitMinutes * 60_000) return null;
+  state.waitUntil = Date.now() + 15_000;
+  state._waitIsFallback = false;
+  if (state._networkNoted) return 'waiting';
+  state._networkNoted = true;
+  return 'network-down';
+}
 function correctUsageWait(state, stripped, config) {
   if (!state._waitIsFallback) return null;
   if (!isRateLimited(stripped, config.customPatterns, RATE_LIMIT_TAIL_LINES)) return null;
@@ -370,6 +388,9 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
         return 'skipped-not-claude';
       }
     }
+
+    const offline = await waitForNetwork(state, tmuxAdapter, config);
+    if (offline) return offline;
 
     // Increment attempts and set cooldown BEFORE sendKeys so that a failure
     // (e.g. pane destroyed) still consumes a retry and avoids tight-loop errors.
@@ -834,6 +855,7 @@ export async function startMonitor(pane, pid) {
     clearMarker: (kind) => clearMarker(kind, pane),
     readStatusline: () => readStatuslineSnapshot(pane, { maxAgeMs: 6 * 3600_000 }),
     clientActivity: () => lastClientActivity(pane).catch(() => null),
+    apiReachable: () => canConnect(connectTarget(config.networkCheck)),
   };
   const isAlive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
@@ -903,6 +925,7 @@ export async function startMonitor(pane, pid) {
       }
       if (result === 'native-grace') await logger.info(`Limit reset. Giving Claude Code's own auto-continue ${config.native.graceSeconds}s to resume the session before sending a continue.`);
       if (result === 'native-resumed') await logger.info("Claude Code's own auto-continue resumed the session. Nothing to send.");
+      if (result === 'network-down') await logger.warn(`Limit reset, but ${config.networkCheck.host}:${config.networkCheck.port} is not reachable (resumed from suspend?). Waiting up to ${config.networkCheck.maxWaitMinutes} min for the network before sending the continue.`);
       if (result === 'user-continued') await logger.info('User already continued. Attempt counter reset.');
       if (result === 'max-retries') await logger.warn(`Max retries (${config.maxRetries}) reached. Monitor still active but will not send further retries until rate limit clears.`);
       if (result === 'skipped-not-claude') await logger.warn(`Foreground is "${state._lastForeground}", not Claude. Skipping send-keys. (Add to foregroundCommands in ${PATHS.config} if this is wrong)`);
