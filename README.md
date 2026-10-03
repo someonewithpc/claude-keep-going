@@ -110,7 +110,7 @@ When you disconnect (SSH drops, close terminal, laptop sleeps), **tmux keeps run
 - **Near-limit wrap-up nudge:** when Claude Code winds a turn down at ~95% of the 5-hour window, sends one `continue` so work runs on to the real limit ([details](#near-limit-wrap-up-nudge)).
 - **Hook signals and statusline tap:** turn state, background work and cache timing come from Claude Code's hooks and statusline input instead of the screen ([details](#hook-signals-and-the-statusline-tap)).
 - **Self-healing coverage:** `reconcile` re-arms monitors for any live `claude` pane that lost one, on a timer if you want ([details](#keeping-monitors-alive)).
-- **Status badge:** in the tmux status bar or the Claude Code statusline (`status --pane`), shows whether a pane is monitored, waiting, backing off, compacting soon, or has given up ([details](#tmux-status-bar-indicator)).
+- **Status badge:** in the tmux status bar or the Claude Code statusline (`status --pane`), shows whether a pane is monitored, waiting, backing off, about to compact, or has given up ([details](#tmux-status-bar-indicator)).
 - **`--print` mode:** buffers output and retries cleanly for piped and scripted use.
 - **XDG paths:** config in `~/.config`, logs in `~/.local/state`, runtime files in `$XDG_RUNTIME_DIR`, with `migrate` for files from an older install ([details](#where-files-live)).
 - **Nix flake:** NixOS and home-manager modules with a `settings` option ([details](#nixos--nix)).
@@ -769,8 +769,6 @@ It prints:
 | Pane state | Indicator |
 |------------|-----------|
 | Actively monitoring | `🟢KG` |
-| Idle compaction is on and its window is open | `🟢KG 🗜` |
-| Idle compaction is on, window opens at 22:00 | `🟢KG 🗜22:00` |
 | Idle compaction scheduled, 3 minutes left | `🟢KG 🗜3m` |
 | Waiting on a usage-limit reset | `⏳KG 1h30m` |
 | Backing off from overload | `🟠KG 45s` |

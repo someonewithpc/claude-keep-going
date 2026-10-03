@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The badge shows 🗜 only while a compaction is scheduled** (`🟢KG 🗜3m`). The armed
+  marker from 0.13.2 (`🟢KG 🗜`, `🟢KG 🗜22:00`) is gone: with compaction on all day it was
+  always there and said nothing.
+
 ### Fixed
 - **`hook-dump.jsonl` is owner-only (0600).** It records prompts and Claude's replies,
   and was created with the default umask, often world-readable.

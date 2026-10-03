@@ -95,8 +95,6 @@ export function formatBadge(snap, now = Math.floor(Date.now() / 1000)) {
     case 'monitoring': {
       // A compaction is scheduled: show the minutes left (see src/compact.js).
       if (typeof snap.compactAt === 'number' && snap.compactAt > now) return `🟢KG 🗜${Math.ceil((snap.compactAt - now) / 60)}m`;
-      // Armed: idle compaction is on, and will act now (🗜) or once its window opens.
-      if (snap.compactArmed === true) return typeof snap.compactFrom === 'string' ? `🟢KG 🗜${snap.compactFrom}` : '🟢KG 🗜';
       return '🟢KG';
     }
     default: return '';
