@@ -104,9 +104,19 @@ describe('applyHooks and removeHooks', () => {
     assert.deepEqual(twice.hooks.Stop[0], other);
     assert.equal(twice.hooks.StopFailure.length, 1);
   });
+  it('adds payload recording only with dump', () => {
+    const plain = applyHooks({}, { prefix: '/bin/ckg' });
+    assert.ok(!JSON.stringify(plain).includes('_hook-dump'));
+    const dumped = applyHooks({}, { prefix: '/bin/ckg', dump: true });
+    assert.ok(dumped.hooks.SubagentStop.some((e) => JSON.stringify(e).includes('_hook-dump')));
+  });
   it('removes ours and leaves the rest', () => {
-    const cleaned = removeHooks(applyHooks(settings, { prefix: '/bin/ckg' }));
+    const cleaned = removeHooks(applyHooks(settings, { prefix: '/bin/ckg', dump: true }));
     assert.deepEqual(cleaned, settings);
+  });
+  it('removes only the recording with onlyDump', () => {
+    const installed = applyHooks(settings, { prefix: '/bin/ckg' });
+    assert.deepEqual(removeHooks(applyHooks(installed, { prefix: '/bin/ckg', dump: true }), { onlyDump: true }), installed);
   });
 });
 

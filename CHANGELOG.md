@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   permission prompts, compactions, model switches). Nothing reads them yet; idle
   compaction in the next release does. The hooks run async and print nothing. They fall
   back to `$TMUX_PANE`, so sessions adopted by `reconcile` produce markers too.
+- **`install-hook --dump`** records raw hook payloads to
+  `~/.local/state/claude-keep-going/hook-dump.jsonl`, for checking what a Claude Code
+  version sends. `uninstall-hook --dump` removes only that.
 
 ## [0.9.0] - 2026-10-03
 

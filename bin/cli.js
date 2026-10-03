@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, appendFile } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -293,7 +293,11 @@ async function cmdStopFailureHook() {
 // Event hooks feed src/markers.js. Async, so they never hold up a turn, and silent: a
 // UserPromptSubmit hook's stdout would be added to the conversation.
 const EVENT_HOOK_MARKER = '_ckg-hook';
-const OUR_MARKERS = [HOOK_MARKER, EVENT_HOOK_MARKER];
+// Temporary payload capture for building test fixtures (install-hook --dump).
+const DUMP_HOOK_MARKER = '_hook-dump';
+const DUMP_EVENTS = ['Stop', 'StopFailure', 'UserPromptSubmit', 'Notification', 'PreCompact', 'PostCompact',
+  'SubagentStart', 'SubagentStop', 'PreModelSwitch', 'PostModelSwitch', 'SessionStart'];
+const OUR_MARKERS = [HOOK_MARKER, EVENT_HOOK_MARKER, DUMP_HOOK_MARKER];
 
 function mergeHook(existing, entry, marker) {
   const kept = (Array.isArray(existing) ? existing : []).filter((e) => !JSON.stringify(e).includes(marker));
@@ -307,19 +311,24 @@ function asyncHookEntry(command) {
 
 // Returns settings with our hooks in place. Entries from other tools are kept, ours
 // replaced, so running it again (or after an upgrade moves the binary) is safe.
-export function applyHooks(settings, { prefix = hookCommandPrefix() } = {}) {
+export function applyHooks(settings, { prefix = hookCommandPrefix(), dump = false } = {}) {
   const out = { ...settings, hooks: { ...(settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {}) } };
   out.hooks.StopFailure = mergeStopFailureHook(out.hooks.StopFailure, stopFailureHookEntry(prefix));
   for (const event of Object.keys(HOOK_EVENTS)) {
     out.hooks[event] = mergeHook(out.hooks[event], asyncHookEntry(`${prefix} ${EVENT_HOOK_MARKER} ${event}`), EVENT_HOOK_MARKER);
   }
+  if (dump) {
+    for (const event of DUMP_EVENTS) {
+      out.hooks[event] = mergeHook(out.hooks[event], asyncHookEntry(`${prefix} ${DUMP_HOOK_MARKER}`), DUMP_HOOK_MARKER);
+    }
+  }
   return out;
 }
 
-// Removes every hook entry this tool wrote.
-export function removeHooks(settings) {
+// Removes every hook entry this tool wrote, or only the dump entries.
+export function removeHooks(settings, { onlyDump = false } = {}) {
   if (!settings.hooks || typeof settings.hooks !== 'object') return settings;
-  const markers = OUR_MARKERS;
+  const markers = onlyDump ? [DUMP_HOOK_MARKER] : OUR_MARKERS;
   const hooks = {};
   for (const [event, entries] of Object.entries(settings.hooks)) {
     const kept = Array.isArray(entries)
@@ -340,10 +349,12 @@ async function cmdInstallHook() {
   const settingsPath = join(resolveConfigDir(positionalArg(0)), 'settings.json');
   let settings = {};
   try { settings = JSON.parse(await readFile(settingsPath, 'utf-8')); } catch { /* new file */ }
-  settings = applyHooks(settings);
+  const dump = process.argv.includes('--dump');
+  settings = applyHooks(settings, { dump });
   await mkdir(dirname(settingsPath), { recursive: true });
   await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   console.log(`Hooks installed in ${settingsPath} (StopFailure, ${Object.keys(HOOK_EVENTS).join(', ')})`);
+  if (dump) console.log(`Also recording raw hook payloads to ${HOOK_DUMP_FILE}. Remove with: claude-keep-going uninstall-hook --dump`);
   console.log('New Claude sessions pick them up; running ones may need a restart.');
 }
 
@@ -351,8 +362,9 @@ async function cmdUninstallHook() {
   const settingsPath = join(resolveConfigDir(positionalArg(0)), 'settings.json');
   try {
     const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
-    await writeFile(settingsPath, JSON.stringify(removeHooks(settings), null, 2) + '\n');
-    console.log(`Hooks removed from ${settingsPath}`);
+    const onlyDump = process.argv.includes('--dump');
+    await writeFile(settingsPath, JSON.stringify(removeHooks(settings, { onlyDump }), null, 2) + '\n');
+    console.log(onlyDump ? `Payload recording removed from ${settingsPath}` : `Hooks removed from ${settingsPath}`);
   } catch { console.log('No settings file to modify.'); }
 }
 
@@ -366,6 +378,25 @@ async function cmdEventHook() {
     const payload = JSON.parse(Buffer.concat(chunks).toString() || '{}');
     const pane = paneKeyFromEnv();
     if (kind && pane) await writeMarker(kind, pane, markerFromHook(kind, payload));
+  } catch { /* never break the host session */ }
+  process.exit(0);
+}
+
+const HOOK_DUMP_FILE = join(dirname(PATHS.logs), 'hook-dump.jsonl');
+
+async function cmdHookDump() {
+  try {
+    const chunks = [];
+    for await (const c of process.stdin) chunks.push(c);
+    const payload = JSON.parse(Buffer.concat(chunks).toString() || '{}');
+    const record = {
+      ...payload,
+      _ts: Date.now(),
+      _tmux_pane: process.env.TMUX_PANE ?? null,
+      _kg_pane: process.env.CLAUDE_KEEP_GOING_PANE ?? null,
+    };
+    await mkdir(dirname(HOOK_DUMP_FILE), { recursive: true });
+    await appendFile(HOOK_DUMP_FILE, JSON.stringify(record) + '\n');
   } catch { /* never break the host session */ }
   process.exit(0);
 }
@@ -661,6 +692,7 @@ if (isMain) switch (command) {
   case 'reconcile': await cmdReconcile(); break;
   case 'migrate': await cmdMigrate(); break;
   case EVENT_HOOK_MARKER: await cmdEventHook(); break;
+  case DUMP_HOOK_MARKER: await cmdHookDump(); break;
   case 'exclude-self': await cmdExcludeSelf(); break;
   case 'install-timer': await cmdInstallTimer(); break;
   case 'uninstall-timer': await cmdUninstallTimer(); break;
@@ -678,8 +710,9 @@ if (isMain) switch (command) {
     console.log('  claude-keep-going install-hook [dir] Install the hooks (StopFailure, Stop,');
     console.log('                                       UserPromptSubmit, Notification, PostCompact,');
     console.log('                                       PostModelSwitch) into <dir>/settings.json');
-    console.log('                                       (default: $CLAUDE_CONFIG_DIR or ~/.claude)');
-    console.log('  claude-keep-going uninstall-hook [dir]  Remove them');
+    console.log('                                       (default: $CLAUDE_CONFIG_DIR or ~/.claude).');
+    console.log('                                       --dump also records raw payloads');
+    console.log('  claude-keep-going uninstall-hook [dir]  Remove them (--dump: only the recording)');
     console.log('  claude-keep-going reconcile          Re-arm a monitor for every live tmux');
     console.log('                                       claude session not already covered');
     console.log('                                       (--dry-run to preview). Run after a crash.');

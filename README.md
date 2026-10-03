@@ -390,6 +390,10 @@ These hooks run async and print nothing, so they never slow a turn down or add t
 it. Markers are keyed by tmux pane like the `StopFailure` ones. Sessions that `reconcile`
 adopted get them too, because the hook falls back to `$TMUX_PANE`.
 
+`install-hook --dump` also appends every raw hook payload to
+`~/.local/state/claude-keep-going/hook-dump.jsonl`. Use it to check what your Claude Code
+version actually sends, then remove it with `uninstall-hook --dump`.
+
 ## Safeguard retry
 
 A third failure mode, separate from usage limits and 5xx overloads: the model's
@@ -619,8 +623,8 @@ claude-keep-going logs             # Tail today's log file in real-time
 claude-keep-going version          # Print version
 
 # Event-driven overload detection (optional; see "Overload backoff")
-claude-keep-going install-hook [dir]    # Install the hooks into a config dir
-claude-keep-going uninstall-hook [dir]  # Remove them
+claude-keep-going install-hook [dir]    # Install the hooks into a config dir (--dump: also record payloads)
+claude-keep-going uninstall-hook [dir]  # Remove them (--dump: only the recording)
 
 # Monitor coverage (see "Keeping monitors alive")
 claude-keep-going reconcile        # Re-arm a monitor for every live claude pane not covered
