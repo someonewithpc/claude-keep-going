@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
@@ -512,9 +512,14 @@ async function cmdVersion() {
 }
 
 // --- Main ---
-const command = process.argv[2];
+// Only dispatch when run as the CLI. Tests import this file for its helpers, and without
+// the guard every import printed the usage text. argv[1] can be an npm bin symlink.
+const isMain = (() => {
+  try { return realpathSync(process.argv[1] || '') === realpathSync(__filename); } catch { return false; }
+})();
+const command = isMain ? process.argv[2] : null;
 
-switch (command) {
+if (isMain) switch (command) {
   case 'install': await cmdInstall(); break;
   case 'uninstall': await cmdUninstall(); break;
   case 'install-hook': await cmdInstallHook(); break;
