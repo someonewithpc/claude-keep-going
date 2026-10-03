@@ -30,8 +30,11 @@ in
         # KillMode=control-group would kill them along with it.
         KillMode = "process";
         ExecStart = "${cfg.package}/bin/claude-keep-going reconcile";
-      } // lib.optionalAttrs cfg.installHook {
-        ExecStartPre = "-${cfg.package}/bin/claude-keep-going install-hook";
+        # Moves files left in ~/.claude-auto-retry* by older versions. Enabling the
+        # module is the consent the interactive `install` would otherwise ask for, and
+        # once nothing is left it is a no-op.
+        ExecStartPre = [ "-${cfg.package}/bin/claude-keep-going migrate --yes --quiet" ]
+          ++ lib.optional cfg.installHook "-${cfg.package}/bin/claude-keep-going install-hook";
       };
     };
 

@@ -29,6 +29,11 @@ in
       # changed, so install-hook belongs here instead of on the reconcile
       # timer, which would otherwise re-run it (and rewrite settings.json)
       # every `reconcileTimer.interval` for no reason between switches.
+      # Moves files left in ~/.claude-auto-retry* by older versions; a no-op once done.
+      home.activation.claudeKeepGoingMigrate = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        run ${cfg.package}/bin/claude-keep-going migrate --yes --quiet
+      '';
+
       home.activation.claudeKeepGoingInstallHook = lib.mkIf cfg.installHook (
         lib.hm.dag.entryAfter [ "writeBoundary" ] ''
           run ${cfg.package}/bin/claude-keep-going install-hook
