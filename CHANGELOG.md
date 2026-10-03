@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Reset time from the statusline.** A usage wait with no reset time on screen (it fell
+  back to `fallbackWaitHours`) now takes the reset of the full usage window from the
+  statusline tap, even when that is later, as with a full weekly window.
+
 ## [0.11.0] - 2026-10-03
 
 ### Added

@@ -265,6 +265,16 @@ snapshot file under `$XDG_RUNTIME_DIR/claude-keep-going/tmp/` that only the laun
 deletes immediately). Nothing about your environment — names or values — ever appears
 on a `tmux` command line, so secrets can't surface in `/proc/<pid>/cmdline`.
 
+## After a usage limit resets
+
+### Reset time from the statusline
+
+When the limit screen shows no reset time (the `/rate-limit-options` menu often doesn't),
+the wait falls back to `fallbackWaitHours`. With the
+[statusline tap](#hook-signals-and-the-statusline-tap) in place, the monitor reads which
+usage window is full and when it resets, and waits for that instead. A reset time on the
+screen still wins.
+
 ## Overload backoff
 
 Separate from subscription rate limits, this fork also detects **sustained API

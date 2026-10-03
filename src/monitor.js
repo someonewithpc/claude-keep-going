@@ -4,7 +4,7 @@ import { capturePane, sendKeys, sendKey, getPaneCommand, isProcessForeground, la
 import { loadConfig } from './config.js';
 import { createCompactState, compactTick } from './compact.js';
 import { readMarker, clearMarker } from './markers.js';
-import { readStatuslineSnapshot } from './statusline.js';
+import { readStatuslineSnapshot, fullWindowReset } from './statusline.js';
 import { PATHS } from './paths.js';
 import { createLogger } from './logger.js';
 import { readStopFailureEvent, clearStopFailureEvent, isRetryableError, isUsageLimitError } from './events.js';
@@ -159,6 +159,20 @@ function enterUsageWait(state, stripped, config, { fresh = false, viaUsageEvent 
 //   - Success clears the latch: the wait now comes from a real reset time, so it stops
 //     being a candidate and the correction logs exactly once.
 const WAIT_CORRECTION_EPSILON_MS = 1000;
+
+// A fallback wait (no reset time on screen) corrected from the statusline tap, which
+// knows which usage window is full and when it resets. Unlike the banner correction this
+// may also push the wake-up later: a full weekly window outlasts the 5-hour fallback,
+// and waking early would only burn retries. Returns a log line, or null.
+async function correctWaitFromStatusline(state, tmuxAdapter, config) {
+  if (!state._waitIsFallback || !tmuxAdapter.readStatusline) return null;
+  const full = fullWindowReset(await tmuxAdapter.readStatusline());
+  if (!full || full.resetsAt <= Date.now()) return null;
+  state.waitUntil = full.resetsAt + config.marginSeconds * 1000;
+  state._waitIsFallback = false;
+  return `${full.window} usage window resets ${new Date(full.resetsAt).toLocaleString()} (from the statusline)`;
+}
+
 function correctUsageWait(state, stripped, config) {
   if (!state._waitIsFallback) return null;
   if (!isRateLimited(stripped, config.customPatterns, RATE_LIMIT_TAIL_LINES)) return null;
@@ -256,7 +270,8 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
     // lastRateLimitMessage is set ONLY on the branch that logs it — a correction that falls
     // through to 'retried'/'user-continued' would otherwise leave the message set for the
     // next plain 'waiting' tick to log as a spurious fresh detection.
-    const correctedMessage = correctUsageWait(state, stripped, config);
+    let correctedMessage = correctUsageWait(state, stripped, config);
+    if (!correctedMessage) correctedMessage = await correctWaitFromStatusline(state, tmuxAdapter, config);
     // viaUsageEvent: this wait was entered off a transcript-resolved marker, meaning the
     // scrape found no banner at marker time — the whole reason the fallback exists (#50).
     // While set, an absent banner in the tail is the EXPECTED steady state, not evidence of

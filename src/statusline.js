@@ -65,3 +65,17 @@ export function contextPercent(snap) {
   const p = snap?.context_window?.used_percentage;
   return typeof p === 'number' ? p : null;
 }
+
+// The reset time of the usage window that is full (used_percentage >= 100), as epoch ms,
+// or null. When more than one is full the later reset is the one that matters.
+export function fullWindowReset(snap) {
+  const rl = snap?.rate_limits;
+  if (!rl || typeof rl !== 'object') return null;
+  let best = null;
+  for (const [name, w] of Object.entries(rl)) {
+    if (!w || typeof w.used_percentage !== 'number' || typeof w.resets_at !== 'number') continue;
+    if (w.used_percentage < 100) continue;
+    if (!best || w.resets_at > best.resetsAt / 1000) best = { window: name, resetsAt: w.resets_at * 1000 };
+  }
+  return best;
+}
