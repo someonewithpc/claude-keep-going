@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-03
+
 ### Changed
 - **Files live in XDG base directories.** Config is `~/.config/claude-keep-going/config.json`
   (layered over `/etc/xdg/claude-keep-going/config.json`), logs are under
