@@ -223,8 +223,16 @@ function stopFailureHookEntry() {
   // owned by the scraper usage path, not a seconds-scale event retry (see src/events.js).
   return {
     matcher: 'overloaded|server_error',
-    hooks: [{ type: 'command', command: `node ${__filename} ${HOOK_MARKER}`, timeout: 5 }],
+    hooks: [{ type: 'command', command: `${hookCommandPrefix()} ${HOOK_MARKER}`, timeout: 5 }],
   };
+}
+
+// Claude Code runs the hook through a shell with its own PATH, which may not have `node`
+// on it. A packaged install (the Nix wrapper) sets CLAUDE_KEEP_GOING_BIN to its own
+// entry point; otherwise pin the node binary running this install.
+export function hookCommandPrefix(env = process.env, execPath = process.execPath, cliPath = __filename) {
+  if (env.CLAUDE_KEEP_GOING_BIN) return `"${env.CLAUDE_KEEP_GOING_BIN}"`;
+  return `"${execPath}" "${cliPath}"`;
 }
 
 // Idempotent: drop any prior entry pointing at our handler, then add the current one.

@@ -34,8 +34,12 @@ stdenv.mkDerivation (finalAttrs: {
     # findutils, gnugrep, gnused, systemd), which has no `ps`, so the reconcile
     # timer failed with "reconcile failed: spawn ps ENOENT" on every interval
     # until this was added. Darwin ships ps in the base system and has no procps.
+    #
+    # CLAUDE_KEEP_GOING_BIN makes install-hook write this wrapper into settings.json
+    # instead of a bare `node cli.js`, so the hook gets the PATH above too.
     makeWrapper ${nodejs}/bin/node $out/bin/claude-keep-going \
       --add-flags "$out/lib/claude-keep-going/bin/cli.js" \
+      --set CLAUDE_KEEP_GOING_BIN $out/bin/claude-keep-going \
       --prefix PATH : ${lib.makeBinPath ([ tmux ] ++ lib.optionals stdenv.hostPlatform.isLinux [ procps ])}
     ln -s $out/lib/claude-keep-going/bin/tmux-status.sh $out/bin/claude-keep-going-tmux-status
 

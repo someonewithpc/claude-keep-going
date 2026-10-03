@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   packages mark it with the same subcommand name.
 
 ### Fixed
+- **The StopFailure hook no longer needs `node` on Claude Code's PATH.** The hook command
+  was `node <path>/cli.js`, which fails silently when Claude Code runs it with a PATH that
+  has no `node`. It now names the node binary by absolute path, or the Nix wrapper
+  (which also brings tmux and procps) when installed from the flake. Re-run `install-hook`
+  to pick it up; the Nix modules do this on their own.
 - **A weekly-limit banner with a calendar date is now detected and parsed.** Weekly limits
   render their reset with a date — "You've hit your weekly limit · resets Aug 21 at 3pm
   (Australia/Brisbane)", a real Claude Code record surfaced by PR #56's fixture — and both

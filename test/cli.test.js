@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
-import { injectWrapper, removeWrapper, mergeStopFailureHook, MARKER_START, MARKER_END, LEGACY_MARKER_START, LEGACY_MARKER_END, renderReconcileUnit, renderReconcilePlist } from '../bin/cli.js';
+import { injectWrapper, removeWrapper, mergeStopFailureHook, hookCommandPrefix, MARKER_START, MARKER_END, LEGACY_MARKER_START, LEGACY_MARKER_END, renderReconcileUnit, renderReconcilePlist } from '../bin/cli.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -133,6 +133,16 @@ describe('mergeStopFailureHook', () => {
   });
   it('is idempotent', () => {
     assert.deepEqual(mergeStopFailureHook(mergeStopFailureHook([], entry), entry), [entry]);
+  });
+});
+
+describe('hookCommandPrefix', () => {
+  it('uses the packaged entry point when CLAUDE_KEEP_GOING_BIN is set', () => {
+    assert.equal(hookCommandPrefix({ CLAUDE_KEEP_GOING_BIN: '/nix/store/x/bin/claude-keep-going' }, '/usr/bin/node', '/x/cli.js'),
+      '"/nix/store/x/bin/claude-keep-going"');
+  });
+  it('pins the node binary otherwise, instead of relying on PATH', () => {
+    assert.equal(hookCommandPrefix({}, '/home/u/.nvm/node', '/home/u/lib/cli.js'), '"/home/u/.nvm/node" "/home/u/lib/cli.js"');
   });
 });
 
