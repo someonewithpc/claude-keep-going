@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeStopFailureEvent, isRetryableError, isUsageLimitError } from '../src/events.js';
-import { sweepStaleStatus } from '../src/status-file.js';
+import { sweepStaleStatus, readStatus, formatBadge } from '../src/status-file.js';
 import { PATHS } from '../src/paths.js';
 import { planMigration, applyMigration, describeStep, sweepLegacyDir, olderMonitorPids } from '../src/migrate.js';
 import { reconcile, excludeSelf, parseRunningMonitors, PGREP_LIST_FLAG } from '../src/reconcile.js';
@@ -187,7 +187,19 @@ async function cmdUninstall() {
   console.log('Shell function removed. Restart your shell to complete.');
 }
 
+function argValue(name) {
+  const i = process.argv.indexOf(name);
+  return i !== -1 ? process.argv[i + 1] : undefined;
+}
+
 async function cmdStatus() {
+  const pane = argValue('--pane');
+  if (pane !== undefined) {
+    // Badge for one pane, for a statusline. Prints nothing when the pane has no live
+    // monitor. --socket defaults to the tmux server in $TMUX.
+    process.stdout.write(formatBadge(await readStatus(pane, undefined, argValue('--socket'))));
+    return;
+  }
   const logDir = PATHS.logs;
   const today = new Date().toISOString().split('T')[0];
   const logFile = join(logDir, `${today}.log`);
@@ -623,6 +635,8 @@ if (isMain) switch (command) {
     console.log('                                       on Linux, launchd LaunchAgent on macOS)');
     console.log('  claude-keep-going uninstall-timer    Remove the reconcile timer');
     console.log('  claude-keep-going status             Show monitor status');
+    console.log('  claude-keep-going status --pane <id> [--socket <path>]');
+    console.log('                                       Print the status badge for one pane');
     console.log('  claude-keep-going logs               Tail today\'s log');
     console.log('  claude-keep-going version            Print version');
     break;

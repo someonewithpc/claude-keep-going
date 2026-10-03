@@ -72,6 +72,29 @@ export async function readStatus(paneKey, dir = STATUS_DIR, socketId = undefined
   }
 }
 
+// The badge bin/tmux-status.sh prints, for callers that can run node (a Claude Code
+// statusLine command, for one). Keep the two in step. Returns '' when there is nothing to
+// show: no snapshot, an unknown status, or a snapshot older than twice the poll interval.
+export function formatBadge(snap, now = Math.floor(Date.now() / 1000)) {
+  if (!snap || typeof snap.status !== 'string' || typeof snap.updatedAt !== 'number') return '';
+  const interval = typeof snap.pollIntervalSeconds === 'number' ? snap.pollIntervalSeconds : 15;
+  if (now - snap.updatedAt > Math.max(interval * 2, 10)) return '';
+  if (snap.gaveUp === true) return '🔴KG';
+  const remain = (until) => Math.max(0, (typeof until === 'number' ? until : now) - now);
+  switch (snap.status) {
+    case 'waiting': {
+      const r = remain(snap.waitUntil);
+      return r >= 3600
+        ? `⏳KG ${Math.floor(r / 3600)}h${String(Math.floor((r % 3600) / 60)).padStart(2, '0')}m`
+        : `⏳KG ${Math.floor(r / 60)}m`;
+    }
+    case 'overload': return `🟠KG ${remain(snap.overloadWaitUntil)}s`;
+    case 'safeguard': return `🛡KG ${remain(snap.safeguardWaitUntil)}s`;
+    case 'monitoring': return '🟢KG';
+    default: return '';
+  }
+}
+
 export async function clearStatus(paneKey, dir = STATUS_DIR) {
   try { await unlink(fileFor(paneKey, dir)); } catch { /* already gone */ }
 }

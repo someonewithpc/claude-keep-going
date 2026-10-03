@@ -578,6 +578,19 @@ no `node`), so it's cheap to run every few seconds from every attached client.
 `status-interval` defaults to 15s in tmux; dropping it to `5` (matching the monitor's
 default `pollIntervalSeconds`) keeps the overload countdown responsive.
 
+### In the Claude Code statusline
+
+Claude Code runs its `statusLine` command inside the pane, with `$TMUX` and `$TMUX_PANE`
+set, so the badge can go there instead of the tmux bar:
+
+```bash
+badge=$(claude-keep-going status --pane "$TMUX_PANE")
+```
+
+It prints the same badge as `tmux-status.sh`, or nothing when the pane has no live monitor,
+and finds the status file the same way the monitor does. Pass `--socket <path>` to read a
+different tmux server than the one in `$TMUX`.
+
 ## CLI Commands
 
 ```bash

@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the old directory once no older monitor uses it. `install` offers it (`--yes`,
   `--no-migrate`), and `reconcile` deletes the leftover directory later. The Nix modules
   run `migrate --yes` themselves.
+- **`claude-keep-going status --pane <id>`** prints the status badge for one pane, the same
+  output as `tmux-status.sh`. A Claude Code statusLine command can call it instead of
+  reading the status file itself, so it doesn't have to know where the file lives.
 - **Nix `settings` option.** `programs.claude-keep-going.settings` is written as the JSON
   config: `/etc/xdg/claude-keep-going/config.json` from the NixOS module,
   `~/.config/claude-keep-going/config.json` from home-manager.
