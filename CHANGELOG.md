@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-03
+
 ### Added
 - **Hooks for turn state.** `install-hook` now also registers `Stop`, `UserPromptSubmit`,
   `Notification`, `PostCompact` and `PostModelSwitch` hooks. Each writes a small marker for
