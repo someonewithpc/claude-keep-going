@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   binary, Nix option (`programs.claude-keep-going`), systemd and launchd unit names, and
   environment variables (`CLAUDE_KEEP_GOING_*`). The status badge reads `KG` instead of `AR`.
   State files stay under `~/.claude-auto-retry*` for now, so running monitors keep working.
+- **`install` and `install-timer` replace what claude-auto-retry installed.** `install`
+  removes the old `# >>> claude-auto-retry >>>` block from your rc files, so there is only
+  one `claude()` function. `install-timer` disables and deletes the old reconcile timer or
+  LaunchAgent. `install-hook` already replaced the old StopFailure entry, since both
+  packages mark it with the same subcommand name.
 
 ### Fixed
 - **A weekly-limit banner with a calendar date is now detected and parsed.** Weekly limits

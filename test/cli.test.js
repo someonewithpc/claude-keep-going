@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
-import { injectWrapper, removeWrapper, MARKER_START, MARKER_END, renderReconcileUnit, renderReconcilePlist } from '../bin/cli.js';
+import { injectWrapper, removeWrapper, mergeStopFailureHook, MARKER_START, MARKER_END, LEGACY_MARKER_START, LEGACY_MARKER_END, renderReconcileUnit, renderReconcilePlist } from '../bin/cli.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -101,6 +101,38 @@ describe('injectWrapper', () => {
     assert.ok(!content.includes('old stuff'));
     assert.ok(content.includes('before'));
     assert.ok(content.includes('after'));
+  });
+  it('removes a claude-auto-retry block and reports it', async () => {
+    await writeFile(testFile, `before\n${LEGACY_MARKER_START}\nclaude() { old; }\n${LEGACY_MARKER_END}\nafter\n`);
+    const result = await injectWrapper(testFile, '/new/path/launcher.js');
+    const content = await readFile(testFile, 'utf-8');
+    assert.equal(result.replacedLegacy, true);
+    assert.ok(!content.includes(LEGACY_MARKER_START));
+    assert.ok(!content.includes('claude() { old; }'));
+    assert.ok(content.includes(MARKER_START));
+    assert.ok(content.includes('before'));
+    assert.ok(content.includes('after'));
+  });
+  it('reports no legacy block when there is none', async () => {
+    await writeFile(testFile, 'before\n');
+    const result = await injectWrapper(testFile, '/new/path/launcher.js');
+    assert.equal(result.replacedLegacy, false);
+  });
+});
+
+describe('mergeStopFailureHook', () => {
+  const entry = { matcher: 'overloaded|server_error', hooks: [{ type: 'command', command: '/new/bin/claude-keep-going _stopfailure-hook', timeout: 5 }] };
+
+  it('replaces an entry written by claude-auto-retry', () => {
+    const old = { matcher: 'overloaded|server_error', hooks: [{ type: 'command', command: 'node /nix/store/x-claude-auto-retry-0.7.3/lib/claude-auto-retry/bin/cli.js _stopfailure-hook', timeout: 5 }] };
+    assert.deepEqual(mergeStopFailureHook([old], entry), [entry]);
+  });
+  it('keeps unrelated entries', () => {
+    const other = { matcher: 'rate_limit', hooks: [{ type: 'command', command: 'notify-send limit' }] };
+    assert.deepEqual(mergeStopFailureHook([other], entry), [other, entry]);
+  });
+  it('is idempotent', () => {
+    assert.deepEqual(mergeStopFailureHook(mergeStopFailureHook([], entry), entry), [entry]);
   });
 });
 

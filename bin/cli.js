@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -18,6 +18,9 @@ const WRAPPER_TEMPLATE = join(SRC_DIR, 'wrapper.sh');
 
 export const MARKER_START = '# >>> claude-keep-going >>>';
 export const MARKER_END = '# <<< claude-keep-going <<<';
+// Written by claude-auto-retry, the package this one was renamed from.
+export const LEGACY_MARKER_START = '# >>> claude-auto-retry >>>';
+export const LEGACY_MARKER_END = '# <<< claude-auto-retry <<<';
 
 // --- Wrapper injection ---
 
@@ -32,20 +35,27 @@ export async function injectWrapper(rcFile, launcherPath) {
   const template = await readFile(WRAPPER_TEMPLATE, 'utf-8');
   const wrapper = template.replace(/__LAUNCHER_PATH__/g, launcherPath);
 
-  // Remove existing wrapper if present
-  const startIdx = content.indexOf(MARKER_START);
-  const endIdx = content.indexOf(MARKER_END);
-  if (startIdx !== -1 && endIdx !== -1) {
-    const afterMarker = endIdx + MARKER_END.length;
-    // Skip the newline after MARKER_END if present, but don't blindly +1
-    const skipTo = content[afterMarker] === '\n' ? afterMarker + 1
-                 : content.slice(afterMarker, afterMarker + 2) === '\r\n' ? afterMarker + 2
-                 : afterMarker;
-    content = content.slice(0, startIdx) + content.slice(skipTo);
-  }
+  content = stripBlock(content, MARKER_START, MARKER_END).content;
+  // A block left by the package this one was renamed from defines a second claude()
+  // that would shadow or wrap ours, so it goes too.
+  const legacy = stripBlock(content, LEGACY_MARKER_START, LEGACY_MARKER_END);
+  content = legacy.content;
 
   content = content.trimEnd() + '\n\n' + wrapper + '\n';
   await writeFile(rcFile, content);
+  return { replacedLegacy: legacy.found };
+}
+
+function stripBlock(content, start, end) {
+  const startIdx = content.indexOf(start);
+  const endIdx = content.indexOf(end);
+  if (startIdx === -1 || endIdx === -1) return { content, found: false };
+  const afterMarker = endIdx + end.length;
+  // Skip the newline after the end marker if present, but don't blindly +1
+  const skipTo = content[afterMarker] === '\n' ? afterMarker + 1
+               : content.slice(afterMarker, afterMarker + 2) === '\r\n' ? afterMarker + 2
+               : afterMarker;
+  return { content: content.slice(0, startIdx) + content.slice(skipTo), found: true };
 }
 
 export async function removeWrapper(rcFile) {
@@ -148,8 +158,9 @@ async function cmdInstall() {
   if (rcFiles.length === 0) rcFiles.push(bashrc);
 
   for (const rc of rcFiles) {
-    await injectWrapper(rc, LAUNCHER_PATH);
+    const { replacedLegacy } = await injectWrapper(rc, LAUNCHER_PATH);
     console.log(`Shell function added to ${rc}`);
+    if (replacedLegacy) console.log(`  Removed the old claude-auto-retry block from ${rc}`);
   }
 
   console.log(`\nInstalled! Launcher path: ${LAUNCHER_PATH}`);
@@ -216,6 +227,15 @@ function stopFailureHookEntry() {
   };
 }
 
+// Idempotent: drop any prior entry pointing at our handler, then add the current one.
+// The marker is the subcommand name, which claude-auto-retry used too, so its entry is
+// replaced rather than left running next to ours.
+export function mergeStopFailureHook(existing, entry) {
+  const kept = (Array.isArray(existing) ? existing : []).filter((e) => !JSON.stringify(e).includes(HOOK_MARKER));
+  kept.push(entry);
+  return kept;
+}
+
 function resolveConfigDir(arg) {
   return arg || process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
 }
@@ -241,11 +261,7 @@ async function cmdInstallHook() {
   let settings = {};
   try { settings = JSON.parse(await readFile(settingsPath, 'utf-8')); } catch { /* new file */ }
   if (!settings.hooks || typeof settings.hooks !== 'object') settings.hooks = {};
-  const existing = Array.isArray(settings.hooks.StopFailure) ? settings.hooks.StopFailure : [];
-  // Idempotent: drop any prior entry pointing at our handler, then add the current one.
-  const kept = existing.filter((e) => !JSON.stringify(e).includes(HOOK_MARKER));
-  kept.push(stopFailureHookEntry());
-  settings.hooks.StopFailure = kept;
+  settings.hooks.StopFailure = mergeStopFailureHook(settings.hooks.StopFailure, stopFailureHookEntry());
   await mkdir(dirname(settingsPath), { recursive: true });
   await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   console.log(`StopFailure hook installed in ${settingsPath}`);
@@ -277,6 +293,12 @@ const UNIT_TIMER = 'claude-keep-going-reconcile.timer';
 const LAUNCHD_DIR = join(SRC_DIR, '..', 'launchd');
 const LAUNCHD_LABEL = 'com.claude-keep-going.reconcile';
 const LAUNCHD_PLIST = `${LAUNCHD_LABEL}.plist`;
+
+// Units installed by claude-auto-retry, the package this one was renamed from. Left in
+// place they would run a second reconcile against the old package's monitors.
+const LEGACY_UNIT_SERVICE = 'claude-auto-retry-reconcile.service';
+const LEGACY_UNIT_TIMER = 'claude-auto-retry-reconcile.timer';
+const LEGACY_LAUNCHD_LABEL = 'com.claude-auto-retry.reconcile';
 
 function userUnitDir() {
   return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'systemd', 'user');
@@ -327,6 +349,11 @@ async function installTimerLaunchd() {
   await writeFile(plistPath, renderReconcilePlist(template, nodePath, cliPath));
 
   const domain = `gui/${process.getuid()}`;
+  const legacyPlist = join(dest, `${LEGACY_LAUNCHD_LABEL}.plist`);
+  if (existsSync(legacyPlist)) {
+    try { execFileSync('launchctl', ['bootout', `${domain}/${LEGACY_LAUNCHD_LABEL}`], { stdio: 'ignore' }); } catch { /* not loaded */ }
+    try { await unlink(legacyPlist); console.log(`Removed the old claude-auto-retry LaunchAgent (${legacyPlist})`); } catch { /* absent */ }
+  }
   // Reload cleanly if a previous version is already bootstrapped (bootstrap fails on
   // an already-loaded label; bootout of an absent label fails — both safe to ignore).
   try { execFileSync('launchctl', ['bootout', `${domain}/${LAUNCHD_LABEL}`], { stdio: 'ignore' }); } catch { /* not loaded */ }
@@ -374,6 +401,14 @@ async function cmdInstallTimer() {
   }
   await writeFile(join(dest, UNIT_SERVICE), renderReconcileUnit(svcTemplate, nodePath, cliPath));
   await writeFile(join(dest, UNIT_TIMER), timerTemplate);
+
+  if (existsSync(join(dest, LEGACY_UNIT_TIMER))) {
+    try { execFileSync('systemctl', ['--user', 'disable', '--now', LEGACY_UNIT_TIMER], { stdio: 'ignore' }); } catch { /* not enabled */ }
+    for (const u of [LEGACY_UNIT_TIMER, LEGACY_UNIT_SERVICE]) {
+      try { await unlink(join(dest, u)); } catch { /* absent */ }
+    }
+    console.log(`Removed the old claude-auto-retry timer from ${dest}`);
+  }
 
   try {
     execFileSync('systemctl', ['--user', 'daemon-reload'], { stdio: 'inherit' });
