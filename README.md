@@ -373,6 +373,23 @@ default** — blindly typing `claude --continue` into a shell the user may be us
 is worse than surfacing the stall. Set `relaunchOnExit: true` (and adjust
 `relaunchCommand`) only if you actually observe shell-exits on overload.
 
+## Hook signals
+
+Besides `StopFailure`, `install-hook` registers hooks that tell the monitor where a turn
+stands, so it doesn't have to read that off the screen:
+
+| Hook | Marker | What the monitor learns |
+|---|---|---|
+| `Stop` | `stop` | The turn ended, how many background agents and tasks are still running, whether a scheduled wakeup is pending, and the end of the last message |
+| `UserPromptSubmit` | `prompt` | A turn started, and who started it |
+| `Notification` | `notify` | A permission prompt is open, or Claude Code's own auto-continue fired or gave up |
+| `PostCompact` | `compact` | A compaction finished |
+| `PostModelSwitch` | `model` | The model changed |
+
+These hooks run async and print nothing, so they never slow a turn down or add text to
+it. Markers are keyed by tmux pane like the `StopFailure` ones. Sessions that `reconcile`
+adopted get them too, because the hook falls back to `$TMUX_PANE`.
+
 ## Safeguard retry
 
 A third failure mode, separate from usage limits and 5xx overloads: the model's
@@ -602,8 +619,8 @@ claude-keep-going logs             # Tail today's log file in real-time
 claude-keep-going version          # Print version
 
 # Event-driven overload detection (optional; see "Overload backoff")
-claude-keep-going install-hook [dir]    # Install the StopFailure hook into a config dir
-claude-keep-going uninstall-hook [dir]  # Remove it
+claude-keep-going install-hook [dir]    # Install the hooks into a config dir
+claude-keep-going uninstall-hook [dir]  # Remove them
 
 # Monitor coverage (see "Keeping monitors alive")
 claude-keep-going reconcile        # Re-arm a monitor for every live claude pane not covered

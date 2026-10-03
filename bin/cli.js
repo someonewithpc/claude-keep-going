@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { writeStopFailureEvent, isRetryableError, isUsageLimitError } from '../src/events.js';
 import { sweepStaleStatus, readStatus, formatBadge } from '../src/status-file.js';
 import { PATHS } from '../src/paths.js';
+import { HOOK_EVENTS, paneKeyFromEnv, markerFromHook, writeMarker } from '../src/markers.js';
 import { planMigration, applyMigration, describeStep, sweepLegacyDir, olderMonitorPids } from '../src/migrate.js';
 import { reconcile, excludeSelf, parseRunningMonitors, PGREP_LIST_FLAG } from '../src/reconcile.js';
 
@@ -236,13 +237,13 @@ async function cmdLogs() {
 
 const HOOK_MARKER = '_stopfailure-hook';
 
-export function stopFailureHookEntry() {
+export function stopFailureHookEntry(prefix = hookCommandPrefix()) {
   // Matcher filters on the StopFailure error type: the transient-overload classes plus
   // rate_limit (the session/usage limit — routed by the monitor to the hours-scale
   // usage-wait, never the overload backoff; see src/events.js and src/monitor.js).
   return {
     matcher: 'overloaded|server_error|rate_limit',
-    hooks: [{ type: 'command', command: `${hookCommandPrefix()} ${HOOK_MARKER}`, timeout: 5 }],
+    hooks: [{ type: 'command', command: `${prefix} ${HOOK_MARKER}`, timeout: 5 }],
   };
 }
 
@@ -289,30 +290,84 @@ async function cmdStopFailureHook() {
   process.exit(0);
 }
 
+// Event hooks feed src/markers.js. Async, so they never hold up a turn, and silent: a
+// UserPromptSubmit hook's stdout would be added to the conversation.
+const EVENT_HOOK_MARKER = '_ckg-hook';
+const OUR_MARKERS = [HOOK_MARKER, EVENT_HOOK_MARKER];
+
+function mergeHook(existing, entry, marker) {
+  const kept = (Array.isArray(existing) ? existing : []).filter((e) => !JSON.stringify(e).includes(marker));
+  kept.push(entry);
+  return kept;
+}
+
+function asyncHookEntry(command) {
+  return { hooks: [{ type: 'command', command, timeout: 5, async: true }] };
+}
+
+// Returns settings with our hooks in place. Entries from other tools are kept, ours
+// replaced, so running it again (or after an upgrade moves the binary) is safe.
+export function applyHooks(settings, { prefix = hookCommandPrefix() } = {}) {
+  const out = { ...settings, hooks: { ...(settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {}) } };
+  out.hooks.StopFailure = mergeStopFailureHook(out.hooks.StopFailure, stopFailureHookEntry(prefix));
+  for (const event of Object.keys(HOOK_EVENTS)) {
+    out.hooks[event] = mergeHook(out.hooks[event], asyncHookEntry(`${prefix} ${EVENT_HOOK_MARKER} ${event}`), EVENT_HOOK_MARKER);
+  }
+  return out;
+}
+
+// Removes every hook entry this tool wrote.
+export function removeHooks(settings) {
+  if (!settings.hooks || typeof settings.hooks !== 'object') return settings;
+  const markers = OUR_MARKERS;
+  const hooks = {};
+  for (const [event, entries] of Object.entries(settings.hooks)) {
+    const kept = Array.isArray(entries)
+      ? entries.filter((e) => !markers.some((m) => JSON.stringify(e).includes(m)))
+      : entries;
+    if (!Array.isArray(kept) || kept.length > 0) hooks[event] = kept;
+  }
+  const out = { ...settings, hooks };
+  if (Object.keys(hooks).length === 0) delete out.hooks;
+  return out;
+}
+
+function positionalArg(index) {
+  return process.argv.slice(3).filter((a) => !a.startsWith('--'))[index];
+}
+
 async function cmdInstallHook() {
-  const settingsPath = join(resolveConfigDir(process.argv[3]), 'settings.json');
+  const settingsPath = join(resolveConfigDir(positionalArg(0)), 'settings.json');
   let settings = {};
   try { settings = JSON.parse(await readFile(settingsPath, 'utf-8')); } catch { /* new file */ }
-  if (!settings.hooks || typeof settings.hooks !== 'object') settings.hooks = {};
-  settings.hooks.StopFailure = mergeStopFailureHook(settings.hooks.StopFailure, stopFailureHookEntry());
+  settings = applyHooks(settings);
   await mkdir(dirname(settingsPath), { recursive: true });
   await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-  console.log(`StopFailure hook installed in ${settingsPath}`);
-  console.log('New Claude sessions launched via the wrapper will use event-driven detection.');
+  console.log(`Hooks installed in ${settingsPath} (StopFailure, ${Object.keys(HOOK_EVENTS).join(', ')})`);
+  console.log('New Claude sessions pick them up; running ones may need a restart.');
 }
 
 async function cmdUninstallHook() {
-  const settingsPath = join(resolveConfigDir(process.argv[3]), 'settings.json');
+  const settingsPath = join(resolveConfigDir(positionalArg(0)), 'settings.json');
   try {
     const settings = JSON.parse(await readFile(settingsPath, 'utf-8'));
-    if (Array.isArray(settings.hooks?.StopFailure)) {
-      settings.hooks.StopFailure = settings.hooks.StopFailure.filter((e) => !JSON.stringify(e).includes(HOOK_MARKER));
-      if (settings.hooks.StopFailure.length === 0) delete settings.hooks.StopFailure;
-      if (settings.hooks && Object.keys(settings.hooks).length === 0) delete settings.hooks;
-      await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-    }
-    console.log(`StopFailure hook removed from ${settingsPath}`);
+    await writeFile(settingsPath, JSON.stringify(removeHooks(settings), null, 2) + '\n');
+    console.log(`Hooks removed from ${settingsPath}`);
   } catch { console.log('No settings file to modify.'); }
+}
+
+// Invoked BY Claude Code for the events in HOOK_EVENTS. Writes a pane-keyed marker and
+// nothing else: no output, exit 0 whatever happens.
+async function cmdEventHook() {
+  try {
+    const kind = HOOK_EVENTS[process.argv[3]];
+    const chunks = [];
+    for await (const c of process.stdin) chunks.push(c);
+    const payload = JSON.parse(Buffer.concat(chunks).toString() || '{}');
+    const pane = paneKeyFromEnv();
+    if (kind && pane) await writeMarker(kind, pane, markerFromHook(kind, payload));
+  } catch { /* never break the host session */ }
+  process.exit(0);
 }
 
 // --- reconcile timer (self-healing monitor coverage) ---
@@ -605,6 +660,7 @@ if (isMain) switch (command) {
   case HOOK_MARKER: await cmdStopFailureHook(); break;
   case 'reconcile': await cmdReconcile(); break;
   case 'migrate': await cmdMigrate(); break;
+  case EVENT_HOOK_MARKER: await cmdEventHook(); break;
   case 'exclude-self': await cmdExcludeSelf(); break;
   case 'install-timer': await cmdInstallTimer(); break;
   case 'uninstall-timer': await cmdUninstallTimer(); break;
@@ -619,10 +675,11 @@ if (isMain) switch (command) {
     console.log('                                       (--yes to move without asking, --no-migrate');
     console.log('                                       to skip)');
     console.log('  claude-keep-going uninstall          Remove shell wrapper');
-    console.log('  claude-keep-going install-hook [dir] Install the StopFailure hook (event-driven');
-    console.log('                                       overload detection) into <dir>/settings.json');
+    console.log('  claude-keep-going install-hook [dir] Install the hooks (StopFailure, Stop,');
+    console.log('                                       UserPromptSubmit, Notification, PostCompact,');
+    console.log('                                       PostModelSwitch) into <dir>/settings.json');
     console.log('                                       (default: $CLAUDE_CONFIG_DIR or ~/.claude)');
-    console.log('  claude-keep-going uninstall-hook [dir]  Remove the StopFailure hook');
+    console.log('  claude-keep-going uninstall-hook [dir]  Remove them');
     console.log('  claude-keep-going reconcile          Re-arm a monitor for every live tmux');
     console.log('                                       claude session not already covered');
     console.log('                                       (--dry-run to preview). Run after a crash.');

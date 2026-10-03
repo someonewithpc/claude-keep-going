@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Hooks for turn state.** `install-hook` now also registers `Stop`, `UserPromptSubmit`,
+  `Notification`, `PostCompact` and `PostModelSwitch` hooks. Each writes a small marker for
+  the pane (whether the turn ended, what is still running in the background, open
+  permission prompts, compactions, model switches). Nothing reads them yet; idle
+  compaction in the next release does. The hooks run async and print nothing. They fall
+  back to `$TMUX_PANE`, so sessions adopted by `reconcile` produce markers too.
+
 ## [0.9.0] - 2026-10-03
 
 ### Changed

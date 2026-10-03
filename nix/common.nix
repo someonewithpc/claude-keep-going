@@ -45,8 +45,9 @@
       type = lib.types.bool;
       default = true;
       description = ''
-        Install the `StopFailure` hook into Claude Code's settings for
-        event-driven overload detection (no terminal scraping). The hook
+        Install the hooks into Claude Code's settings: `StopFailure` for
+        event-driven overload detection, and Stop, UserPromptSubmit,
+        Notification, PostCompact and PostModelSwitch for turn state. The hook
         command embeds this package's store path, so it is re-applied on
         every reconcile run to stay in sync across upgrades. `install-hook`
         is idempotent, matching its previous entry by a fixed marker rather
