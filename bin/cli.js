@@ -10,6 +10,7 @@ import { writeStopFailureEvent, isRetryableError, isUsageLimitError } from '../s
 import { sweepStaleStatus, readStatus, formatBadge } from '../src/status-file.js';
 import { PATHS } from '../src/paths.js';
 import { HOOK_EVENTS, paneKeyFromEnv, markerFromHook, writeMarker } from '../src/markers.js';
+import { writeStatuslineSnapshot } from '../src/statusline.js';
 import { planMigration, applyMigration, describeStep, sweepLegacyDir, olderMonitorPids } from '../src/migrate.js';
 import { reconcile, excludeSelf, parseRunningMonitors, PGREP_LIST_FLAG } from '../src/reconcile.js';
 
@@ -401,6 +402,28 @@ async function cmdHookDump() {
   process.exit(0);
 }
 
+// statusLine wrapper: save the fields the monitor uses, then run the real statusline
+// command (everything after --) with the same input and pass its output through.
+async function cmdStatuslineTap() {
+  const chunks = [];
+  for await (const c of process.stdin) chunks.push(c);
+  const raw = Buffer.concat(chunks);
+  try {
+    const pane = paneKeyFromEnv();
+    if (pane) await writeStatuslineSnapshot(pane, JSON.parse(raw.toString() || '{}'));
+  } catch { /* the statusline must still render */ }
+  const sep = process.argv.indexOf('--');
+  const cmd = sep === -1 ? [] : process.argv.slice(sep + 1);
+  if (cmd.length === 0) return;
+  const child = spawn(cmd[0], cmd.slice(1), { stdio: ['pipe', 'inherit', 'inherit'] });
+  child.stdin.end(raw);
+  const code = await new Promise((resolve) => {
+    child.on('exit', (c) => resolve(c ?? 1));
+    child.on('error', () => resolve(127));
+  });
+  process.exitCode = code;
+}
+
 // --- reconcile timer (self-healing monitor coverage) ---
 // Linux: systemd --user service+timer. macOS: a launchd LaunchAgent. Same cadence
 // (run shortly after login, then every 5 min), same reconcile entry point.
@@ -693,6 +716,7 @@ if (isMain) switch (command) {
   case 'migrate': await cmdMigrate(); break;
   case EVENT_HOOK_MARKER: await cmdEventHook(); break;
   case DUMP_HOOK_MARKER: await cmdHookDump(); break;
+  case 'statusline-tap': await cmdStatuslineTap(); break;
   case 'exclude-self': await cmdExcludeSelf(); break;
   case 'install-timer': await cmdInstallTimer(); break;
   case 'uninstall-timer': await cmdUninstallTimer(); break;
@@ -713,6 +737,10 @@ if (isMain) switch (command) {
     console.log('                                       (default: $CLAUDE_CONFIG_DIR or ~/.claude).');
     console.log('                                       --dump also records raw payloads');
     console.log('  claude-keep-going uninstall-hook [dir]  Remove them (--dump: only the recording)');
+    console.log('  claude-keep-going statusline-tap -- <cmd...>');
+    console.log('                                       statusLine wrapper: saves cache, usage and');
+    console.log('                                       context numbers for the monitor, then runs');
+    console.log('                                       <cmd> with the same input');
     console.log('  claude-keep-going reconcile          Re-arm a monitor for every live tmux');
     console.log('                                       claude session not already covered');
     console.log('                                       (--dry-run to preview). Run after a crash.');

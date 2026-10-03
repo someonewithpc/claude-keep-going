@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   markerFromHook, writeMarker, readMarker, clearMarker, turnState, isSettled, paneKeyFromEnv,
 } from '../src/markers.js';
+import { snapshotFromStatusline, cacheExpiresAtMs, contextPercent, readStatuslineSnapshot } from '../src/statusline.js';
 import { applyHooks, removeHooks } from '../bin/cli.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -87,6 +88,25 @@ describe('turnState and isSettled', () => {
   });
 });
 
+describe('statusline snapshot', () => {
+  const input = {
+    session_id: 's', model: { display_name: 'Opus 5.5' }, workspace: { current_dir: '/x' },
+    context_window: { used_percentage: 42 },
+    prompt_cache: { warm: true, ttl: '1h', expires_at: 1_800_000_000 },
+    rate_limits: { five_hour: { resets_at: 1_800_003_600 } },
+  };
+  it('keeps only the fields the monitor reads', () => {
+    const s = snapshotFromStatusline(input, 7);
+    assert.deepEqual(Object.keys(s).sort(), ['context_window', 'model', 'prompt_cache', 'rate_limits', 'session_id', 'ts']);
+    assert.equal(cacheExpiresAtMs(s), 1_800_000_000_000);
+    assert.equal(contextPercent(s), 42);
+  });
+  it('has no expiry for a cold cache', () => {
+    assert.equal(cacheExpiresAtMs({ prompt_cache: { warm: false, expires_at: 1 } }), null);
+    assert.equal(cacheExpiresAtMs({}), null);
+  });
+});
+
 describe('applyHooks and removeHooks', () => {
   const other = { hooks: [{ type: 'command', command: '/home/u/notify.sh', async: true }] };
   const settings = { theme: 'dark', hooks: { Stop: [other], Notification: [other] } };
@@ -120,7 +140,7 @@ describe('applyHooks and removeHooks', () => {
   });
 });
 
-describe('hook command', () => {
+describe('hook and tap commands', () => {
   let dir;
   before(async () => { dir = await mkdtemp(join(tmpdir(), 'ckg-hookcli-')); });
   after(async () => { await rm(dir, { recursive: true, force: true }); });
@@ -135,5 +155,20 @@ describe('hook command', () => {
   it('the marker is readable for the pane', async () => {
     const m = await readMarker('prompt', '%7', { dir: join(dir, 'claude-keep-going', 'events'), env: env() });
     assert.equal(m.head, 'hello');
+  });
+  it('statusline-tap saves the snapshot and passes input through to the real command', async () => {
+    const input = JSON.stringify({ prompt_cache: { warm: true, expires_at: 123 } });
+    const out = execFileSync(process.execPath, [join(REPO_ROOT, 'bin', 'cli.js'), 'statusline-tap', '--', 'cat'], {
+      env: env(), input, encoding: 'utf-8',
+    });
+    assert.equal(out, input);
+    const snap = await readStatuslineSnapshot('%7', { dir: join(dir, 'claude-keep-going', 'statusline'), env: env() });
+    assert.equal(snap.prompt_cache.expires_at, 123);
+  });
+  it('statusline-tap still renders when the input is not JSON', () => {
+    const out = execFileSync(process.execPath, [join(REPO_ROOT, 'bin', 'cli.js'), 'statusline-tap', '--', 'cat'], {
+      env: env(), input: 'not json', encoding: 'utf-8',
+    });
+    assert.equal(out, 'not json');
   });
 });

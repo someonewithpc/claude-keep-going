@@ -373,7 +373,7 @@ default** — blindly typing `claude --continue` into a shell the user may be us
 is worse than surfacing the stall. Set `relaunchOnExit: true` (and adjust
 `relaunchCommand`) only if you actually observe shell-exits on overload.
 
-## Hook signals
+## Hook signals and the statusline tap
 
 Besides `StopFailure`, `install-hook` registers hooks that tell the monitor where a turn
 stands, so it doesn't have to read that off the screen:
@@ -389,6 +389,22 @@ stands, so it doesn't have to read that off the screen:
 These hooks run async and print nothing, so they never slow a turn down or add text to
 it. Markers are keyed by tmux pane like the `StopFailure` ones. Sessions that `reconcile`
 adopted get them too, because the hook falls back to `$TMUX_PANE`.
+
+Some numbers only exist in the JSON Claude Code gives its `statusLine` command: when the
+prompt cache expires, when each usage window resets, and how full the context is. To let
+the monitor see them, put `statusline-tap` in front of your statusline command:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "claude-keep-going statusline-tap -- /path/to/your-statusline"
+  }
+}
+```
+
+The tap saves those fields for the pane and runs your command with the same input. With
+nothing after `--` it prints nothing.
 
 `install-hook --dump` also appends every raw hook payload to
 `~/.local/state/claude-keep-going/hook-dump.jsonl`. Use it to check what your Claude Code
@@ -625,6 +641,7 @@ claude-keep-going version          # Print version
 # Event-driven overload detection (optional; see "Overload backoff")
 claude-keep-going install-hook [dir]    # Install the hooks into a config dir (--dump: also record payloads)
 claude-keep-going uninstall-hook [dir]  # Remove them (--dump: only the recording)
+claude-keep-going statusline-tap -- <cmd...>  # statusLine wrapper, see "Hook signals"
 
 # Monitor coverage (see "Keeping monitors alive")
 claude-keep-going reconcile        # Re-arm a monitor for every live claude pane not covered
