@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Compaction fires 5 minutes before the cache expires** (`compact.settle.marginSeconds`
   is 300, was 60). One minute was easy to miss when a draft was in the way.
+- **A draft in the input box no longer blocks compaction.** The monitor reads the text,
+  clears the box with Ctrl+C, sends `/compact`, and types the text back once the
+  compaction confirms or times out. It still waits when the box holds a pasted block or
+  image placeholder, or the text won't clear.
 - **New `compact.waitForAgents` setting** (default `true`, the existing behavior). Set it to
   `false` to compact while background agents are running. A scheduled wakeup still blocks.
 

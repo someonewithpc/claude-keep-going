@@ -804,22 +804,53 @@ export function nearLimitWrapUpMatch(text) {
 // run of box-drawing dashes. Returns false when no box is found, so a caller about to type into the pane holds off
 // rather than guessing.
 const RULE_LINE = /^\s*─{10,}/;
-export function inputBoxEmpty(text) {
+// The box's lines, prompt glyph stripped from the first, and the rule width. Null when
+// no box is on screen.
+function inputBoxContent(text) {
   const lines = stripAnsi(text).split('\n');
   let bottom = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
     if (RULE_LINE.test(lines[i])) { bottom = i; break; }
   }
-  if (bottom <= 0) return false;
+  if (bottom <= 0) return null;
   let top = -1;
   for (let i = bottom - 1; i >= 0; i--) {
     if (RULE_LINE.test(lines[i])) { top = i; break; }
   }
-  if (top === -1 || bottom - top < 2) return false;
+  if (top === -1 || bottom - top < 2) return null;
   const box = lines.slice(top + 1, bottom);
-  if (!/^\s*[❯>]/.test(box[0])) return false;
-  const content = [box[0].replace(/^\s*[❯>]/, ''), ...box.slice(1)].join('\n');
-  return content.replace(/[\s\u00a0]/g, '') === '';
+  if (!/^\s*[❯>]/.test(box[0])) return null;
+  return { lines: [box[0].replace(/^\s*[❯>]/, ''), ...box.slice(1)], width: lines[bottom].trimEnd().length };
+}
+
+export function inputBoxEmpty(text) {
+  const box = inputBoxContent(text);
+  return box !== null && box.lines.join('\n').replace(/[\s\u00a0]/g, '') === '';
+}
+
+// Placeholders Claude Code shows for pasted text and images. The real content isn't on
+// screen, so typing the placeholder back would not restore it.
+const PLACEHOLDER = /\[(Pasted text|Image|\.\.\.Truncated)[^\]]*\]/i;
+
+// What is typed in the input box, for putting back later. '' for an empty box, null
+// when there is no box or the draft can't be read faithfully (a paste placeholder).
+// Ink wraps long lines itself, so a wrap and a typed newline look alike. A line break
+// counts as a wrap when the next word would not have fit on the previous row. That is
+// wrong only for a typed newline after a nearly full row.
+export function inputBoxDraft(text) {
+  const box = inputBoxContent(text);
+  if (!box) return null;
+  const rows = box.lines.map((l, i) => (i === 0 ? l : l.replace(/^ {1,2}/, '')).replace(/[\s\u00a0]+$/, ''));
+  while (rows.length && rows[rows.length - 1] === '') rows.pop();
+  if (rows.length === 0) return '';
+  rows[0] = rows[0].replace(/^[\s\u00a0]+/, '');
+  let out = rows[0];
+  for (let i = 1; i < rows.length; i++) {
+    const nextWord = rows[i].split(/\s/)[0];
+    const wrapped = rows[i - 1] !== '' && rows[i] !== '' && 2 + rows[i - 1].length + 1 + nextWord.length > box.width;
+    out += (wrapped ? ' ' : '\n') + rows[i];
+  }
+  return PLACEHOLDER.test(out) ? null : out;
 }
 
 // Chrome-aware, so isWorking measures the SAME bottom as isRateLimited/detectOverload. A

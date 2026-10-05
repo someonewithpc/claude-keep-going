@@ -87,7 +87,7 @@ You type "claude"
        ├─ API overload: exponential backoff with jitter, then retry
        ├─ Safeguard false positive or interrupted stream: bounded re-send
        ├─ Idle with a big prompt: /compact shortly before the cache expires
-       └─ Types only when Claude is in the foreground and the input box is empty
+       └─ Types only when Claude is in the foreground and the input box is empty (compaction saves and restores a draft)
 
   reconcile (timer) ──▶ re-arms a monitor for any claude pane that lost one
 ```
@@ -533,7 +533,14 @@ With `compact.enabled`, the monitor sends `/compact` itself when all of these ho
 - something asked for it (see `trigger` below)
 - the time window and the away check pass, if you set them
 - the prompt cache is still warm
-- Claude is in the foreground and the input box is empty
+- Claude is in the foreground
+
+If you've left text in the input box, the monitor reads it, clears the box with Ctrl+C,
+sends `/compact`, and types the text back when the compaction ends. If you typed
+something new meanwhile, the old draft goes in after it, on a new line. Pasted text and
+images can't be read off the screen, so a box holding one waits until it is empty. A
+draft that wraps is put back as one line, which is wrong only for a newline you typed
+after a nearly full row.
 
 It needs the hooks from `install-hook`. Timing against the cache needs the
 [statusline tap](#hook-signals-and-the-statusline-tap); without it the monitor waits a
@@ -1191,7 +1198,7 @@ A: The monitor checks that the Claude process is alive on every poll (every 5 se
 A: No. `tmux capture-pane` is extremely lightweight. The monitor uses ~0% CPU at a 5-second polling interval.
 
 **Q: Can it accidentally type into the wrong program?**
-A: Before typing anything, the monitor checks that Claude is the pane's foreground process (the `ps` foreground flag, falling back to the command names in `foregroundCommands`) and, for compaction and model switch-back, that the input box is empty. If you've switched to vim, bash, or anything else, it skips the send.
+A: Before typing anything, the monitor checks that Claude is the pane's foreground process (the `ps` foreground flag, falling back to the command names in `foregroundCommands`) and, for model switch-back, that the input box is empty. Compaction lifts any draft out of the box and types it back afterwards. If you've switched to vim, bash, or anything else, it skips the send.
 
 ## License
 

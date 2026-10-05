@@ -72,6 +72,16 @@ export async function sendKeys(pane, text) {
   await execFileAsync('tmux', buildSendEnterArgs(pane));
 }
 
+// Type text into the input box without submitting it. Newlines go in as Ctrl+J, which
+// Claude Code's input takes as a line break, where a literal newline would submit.
+export async function typeText(pane, text) {
+  const parts = text.split('\n');
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) await execFileAsync('tmux', buildSendKeyArgs(pane, 'C-j'));
+    if (parts[i] !== '') await execFileAsync('tmux', buildSendTextArgs(pane, parts[i]));
+  }
+}
+
 // Latest input time (epoch seconds) across the clients attached to the pane's session,
 // or null when none is attached. tmux resolves a pane id as the session target.
 export function parseClientActivity(stdout) {

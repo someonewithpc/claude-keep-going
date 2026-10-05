@@ -8,8 +8,9 @@
 // marginSeconds before prompt_cache.expires_at, taken from the statusline tap.
 //
 // Everything it needs comes from hook markers (src/markers.js) and the statusline
-// snapshot (src/statusline.js). The only thing still read off the screen is whether the
-// input box is empty, so a half-typed prompt is never submitted with /compact glued on.
+// snapshot (src/statusline.js). The only thing still read off the screen is the input
+// box. A half-typed prompt is read off it, cleared so /compact doesn't get glued onto it,
+// and typed back once the compaction ends.
 
 import { turnState, isSettled } from './markers.js';
 import { cacheExpiresAtMs, contextPercent, contextTokens } from './statusline.js';
@@ -29,6 +30,7 @@ export function createCompactState() {
     lastMatchedMessage: null,
     trigger: null,
     lastBlocked: null,
+    draft: null,           // text lifted out of the input box before compacting, to type back
   };
 }
 
@@ -101,6 +103,14 @@ export async function compactTick(cs, io, config, now = Date.now()) {
     }
   }
 
+  // The compaction is over (or given up on): give the person their draft back.
+  if (cs.draft !== null && cs.confirmed) {
+    if (await io.restoreDraft(cs.draft)) {
+      cs.draft = null;
+      return 'compact-draft-restored';
+    }
+  }
+
   const [stop, prompt] = await Promise.all([io.readMarker('stop'), io.readMarker('prompt')]);
   if (turnState({ stop, prompt }) !== 'idle') { cs.idleSince = null; return null; }
   if (cs.idleSince !== stop.ts) { cs.idleSince = stop.ts; cs.fireAt = null; }
@@ -136,17 +146,32 @@ export async function compactTick(cs, io, config, now = Date.now()) {
     return 'compact-scheduled';
   }
 
-  // Both can last a while (vim in the pane, a half-typed prompt); report each once.
-  const blocked = !(await io.isForeground()) ? 'compact-not-foreground'
-    : !(await io.inputEmpty()) ? 'compact-input-busy' : null;
+  // A draft left over from a compaction that never confirmed would be overwritten below.
+  if (cs.draft !== null) return null;
+
+  // Vim in the pane, or a draft that can't be lifted out and put back (a paste
+  // placeholder, or one that won't clear). Report each once.
+  let draft = '';
+  let blocked = !(await io.isForeground()) ? 'compact-not-foreground' : null;
+  if (!blocked) {
+    draft = await io.readDraft();
+    if (draft === null) blocked = 'compact-input-busy';
+    else if (draft !== '' && !(await io.clearInput())) blocked = 'compact-input-busy';
+  }
   if (blocked) {
     const key = `${blocked}:${stop.ts}`;
     if (cs.lastBlocked === key) return null;
     cs.lastBlocked = key;
     return blocked;
   }
+  if (draft !== '') cs.draft = draft;
 
-  await io.send(trigger.focus ? `/compact ${trigger.focus}` : '/compact');
+  try {
+    await io.send(trigger.focus ? `/compact ${trigger.focus}` : '/compact');
+  } catch (err) {
+    if (cs.draft !== null && await io.restoreDraft(cs.draft)) cs.draft = null;
+    throw err;
+  }
   if (trigger.kind === 'request') await io.clearMarker('request');
   if (trigger.kind === 'last-message') cs.lastMatchedMessage = stop.last;
   cs.handledStop = stop.ts;

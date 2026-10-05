@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCompactState, compactTick, inWindow, compactFireAt } from '../src/compact.js';
-import { inputBoxEmpty } from '../src/patterns.js';
+import { inputBoxEmpty, inputBoxDraft } from '../src/patterns.js';
 import { DEFAULT_CONFIG, DEFAULT_COMPACT, loadConfig } from '../src/config.js';
 import { processOneTick, createMonitorState } from '../src/monitor.js';
 
@@ -18,15 +18,17 @@ function cfg(compact = {}) {
 
 const settledStop = (ts = NOW - MIN) => ({ ts, background: 0, crons: 0, hasBackgroundInfo: true, last: 'All done.' });
 
-function fakeIo({ markers = {}, snapshot = null, activity = null, foreground = true, inputEmpty = true } = {}) {
+function fakeIo({ markers = {}, snapshot = null, activity = null, foreground = true, draft = '', clears = true } = {}) {
   const io = {
-    sent: [], cleared: [], markers: { ...markers },
+    sent: [], cleared: [], restored: [], draft, markers: { ...markers },
     readMarker: async (k) => io.markers[k] ?? null,
     clearMarker: async (k) => { io.cleared.push(k); delete io.markers[k]; },
     readStatusline: async () => snapshot,
     clientActivity: async () => activity,
     isForeground: async () => foreground,
-    inputEmpty: async () => inputEmpty,
+    readDraft: async () => io.draft,
+    clearInput: async () => { if (clears) io.draft = ''; return clears; },
+    restoreDraft: async (d) => { io.restored.push(d); return foreground; },
     send: async (t) => { io.sent.push(t); },
   };
   return io;
@@ -166,12 +168,54 @@ describe('compactTick', () => {
     assert.deepEqual(io.sent, []);
   });
 
-  it('reports a busy input box once and sends when it clears', async () => {
+  it('lifts a draft out of the input box, compacts, and types it back afterwards', async () => {
     const cs = createCompactState();
-    const io = fakeIo({ markers: { stop: settledStop(), request: { ts: NOW - 2 * MIN, action: 'compact' } }, snapshot: warm(MIN / 2), inputEmpty: false });
+    const io = fakeIo({ markers: { stop: settledStop(), request: { ts: NOW - 2 * MIN, action: 'compact' } }, snapshot: warm(MIN / 2), draft: 'half a prompt' });
+    assert.equal(await compactTick(cs, io, cfg(), NOW), 'compact-sent');
+    assert.deepEqual(io.sent, ['/compact']);
+    assert.equal(io.draft, '');
+    assert.deepEqual(io.restored, []);
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 10_000), null);
+    io.markers.compact = { ts: NOW + 20_000 };
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 30_000), 'compact-confirmed');
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 31_000), 'compact-draft-restored');
+    assert.deepEqual(io.restored, ['half a prompt']);
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 32_000), null);
+    assert.equal(io.restored.length, 1);
+  });
+
+  it('types the draft back even when the compaction never confirms', async () => {
+    const cs = createCompactState();
+    const io = fakeIo({ markers: { stop: settledStop(), request: { ts: NOW - 2 * MIN, action: 'compact' } }, snapshot: warm(MIN / 2), draft: 'x' });
+    assert.equal(await compactTick(cs, io, cfg(), NOW), 'compact-sent');
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 6 * MIN), 'compact-unconfirmed');
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 6 * MIN + 1000), 'compact-draft-restored');
+    assert.deepEqual(io.restored, ['x']);
+  });
+
+  it('keeps the draft until Claude is back in the foreground', async () => {
+    const cs = createCompactState();
+    const io = fakeIo({ markers: { stop: settledStop(), request: { ts: NOW - 2 * MIN, action: 'compact' } }, snapshot: warm(MIN / 2), draft: 'x' });
+    assert.equal(await compactTick(cs, io, cfg(), NOW), 'compact-sent');
+    io.markers.compact = { ts: NOW + 20_000 };
+    await compactTick(cs, io, cfg(), NOW + 30_000);
+    const fg = io.restoreDraft;
+    io.restoreDraft = async () => false;
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 31_000), null);
+    io.restoreDraft = fg;
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 32_000), 'compact-draft-restored');
+  });
+
+  it('reports once and holds off when the draft cannot be read or cleared', async () => {
+    const cs = createCompactState();
+    const io = fakeIo({ markers: { stop: settledStop(), request: { ts: NOW - 2 * MIN, action: 'compact' } }, snapshot: warm(MIN / 2), draft: null });
     assert.equal(await compactTick(cs, io, cfg(), NOW), 'compact-input-busy');
     assert.equal(await compactTick(cs, io, cfg(), NOW + 5000), null);
-    io.inputEmpty = async () => true;
+    io.draft = 'stuck';
+    io.clearInput = async () => false;
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 6000), null);
+    assert.deepEqual(io.sent, []);
+    io.draft = '';
     assert.equal(await compactTick(cs, io, cfg(), NOW + 10_000), 'compact-sent');
   });
 
@@ -198,6 +242,23 @@ describe('inWindow', () => {
     assert.equal(inWindow({ start: '22:00', end: '06:00' }, at(23, 30)), true);
     assert.equal(inWindow({ start: '22:00', end: '06:00' }, at(5, 59)), true);
     assert.equal(inWindow({ start: '22:00', end: '06:00' }, at(12)), false);
+  });
+});
+
+describe('inputBoxDraft', () => {
+  const R = '─'.repeat(40);
+  it('reads one line, several lines and an empty box', () => {
+    assert.equal(inputBoxDraft([R, '❯ half a prompt', R].join('\n')), 'half a prompt');
+    assert.equal(inputBoxDraft([R, '❯ one', '  two', R].join('\n')), 'one\ntwo');
+    assert.equal(inputBoxDraft([R, '❯\u00a0', R].join('\n')), '');
+  });
+  it('joins rows Ink wrapped, but not typed newlines', () => {
+    assert.equal(inputBoxDraft([R, '❯ aaaa bbbb cccc dddd eeee ffff gggg', '  hhhh', R].join('\n')), 'aaaa bbbb cccc dddd eeee ffff gggg hhhh');
+    assert.equal(inputBoxDraft([R, '❯ short', '  other', R].join('\n')), 'short\nother');
+  });
+  it('gives up on paste placeholders and a missing box', () => {
+    assert.equal(inputBoxDraft([R, '❯ see [Pasted text #1 +20 lines]', R].join('\n')), null);
+    assert.equal(inputBoxDraft('just some output'), null);
   });
 });
 

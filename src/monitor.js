@@ -1,6 +1,6 @@
-import { stripAnsi, isRateLimited, findRateLimitMessage, isRateLimitOptionsPrompt, menuStepsToWaitOption, detectOverload, overloadMatch, detectSafeguard, safeguardMatch, detectStreamInterrupted, streamInterruptedMatch, nearLimitWrapUpMatch, inputBoxEmpty, isWorking, isInternalRetry, resumedAfterLimit } from './patterns.js';
+import { stripAnsi, isRateLimited, findRateLimitMessage, isRateLimitOptionsPrompt, menuStepsToWaitOption, detectOverload, overloadMatch, detectSafeguard, safeguardMatch, detectStreamInterrupted, streamInterruptedMatch, nearLimitWrapUpMatch, inputBoxEmpty, inputBoxDraft, isWorking, isInternalRetry, resumedAfterLimit } from './patterns.js';
 import { parseResetTime, calculateWaitMs } from './time-parser.js';
-import { capturePane, sendKeys, sendKey, getPaneCommand, isProcessForeground, lastClientActivity } from './tmux.js';
+import { capturePane, sendKeys, sendKey, typeText, getPaneCommand, isProcessForeground, lastClientActivity } from './tmux.js';
 import { loadConfig } from './config.js';
 import { createCompactState, compactTick } from './compact.js';
 import { readMarker, clearMarker, turnState } from './markers.js';
@@ -867,7 +867,24 @@ export async function processOneTick(state, tmuxAdapter, pane, config, isAlive, 
         if (!fg.ok) state._lastForeground = fg.fg;
         return fg.ok;
       },
-      inputEmpty: async () => inputBoxEmpty(stripped),
+      readDraft: async () => inputBoxDraft(stripped),
+      // Ctrl+C clears Claude Code's input box when it has text in it. Only called for a
+      // non-empty box, since on an empty one it starts the exit prompt.
+      clearInput: async () => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await tmuxAdapter.sendKey(pane, 'C-c');
+          await new Promise((r) => setTimeout(r, 300));
+          if (inputBoxEmpty(await tmuxAdapter.capturePane(pane, 120))) return true;
+        }
+        return false;
+      },
+      // Typed after whatever the person has put in the box since, so nothing of theirs is lost.
+      restoreDraft: async (draft) => {
+        if (!(await checkForeground(tmuxAdapter, pane, config)).ok) return false;
+        const box = await tmuxAdapter.capturePane(pane, 120);
+        await tmuxAdapter.typeText(pane, (inputBoxEmpty(box) ? '' : '\n') + draft);
+        return true;
+      },
       send: (text) => tmuxAdapter.sendKeys(pane, text),
     }, config);
     if (result) return result;
@@ -905,7 +922,7 @@ export async function startMonitor(pane, pid) {
 
   const eventMaxAgeMs = (config.overload?.eventMaxAgeSeconds || 120) * 1000;
   const tmuxAdapter = {
-    capturePane, sendKeys, sendKey, getPaneCommand,
+    capturePane, sendKeys, sendKey, typeText, getPaneCommand,
     isClaudeForeground: () => isProcessForeground(pid),
     // Pane-keyed StopFailure markers (written by the hook). The daemon owns the pane,
     // so this is a direct read — no session-id resolution needed.
@@ -1040,7 +1057,8 @@ export async function startMonitor(pane, pid) {
         if (result === 'compact-unconfirmed') await logger.warn(`Sent /compact but no PostCompact hook arrived within ${config.compact.confirmMinutes} min.`);
         if (result === 'compact-skipped-cold') await logger.info('Would compact, but the prompt cache has already expired, so it would cost a full cold read. Skipped.');
         if (result === 'compact-not-foreground') await logger.warn(`Time to compact, but the foreground is "${state._lastForeground}", not Claude. Waiting.`);
-        if (result === 'compact-input-busy') await logger.info('Time to compact, but the input box has text in it. Waiting until it is empty.');
+        if (result === 'compact-input-busy') await logger.info('Time to compact, but the input box holds something that can\'t be saved and restored (a pasted block, or text that won\'t clear). Waiting until it is empty.');
+        if (result === 'compact-draft-restored') await logger.info('Typed the unsent draft back into the input box.');
       }
       if (result === 'interrupted-gave-up') await logger.warn(`Stream still truncated after ${config.streamInterrupted.maxRetries} resume attempts. Giving up — the connection may still be down after the wake. Will not retry until it clears.`);
     } catch (err) {
