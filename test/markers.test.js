@@ -24,6 +24,11 @@ describe('markerFromHook', () => {
       ts: 5, session_id: 's', background: 1, crons: 0, hasBackgroundInfo: true, last: 2000, transcript_path: '/t.jsonl',
     });
   });
+  it('ignores long-lived monitors and shells when counting background work', () => {
+    const tasks = [{ id: 'a', type: 'monitor' }, { id: 'b', type: 'shell' }, { id: 'c', type: 'subagent' }, { id: 'd' }];
+    assert.equal(markerFromHook('stop', { background_tasks: tasks }).background, 2);
+    assert.equal(markerFromHook('stop', { background_tasks: tasks.slice(0, 2) }).background, 0);
+  });
   it('marks a Stop payload without background_tasks as unknown', () => {
     assert.equal(markerFromHook('stop', {}).hasBackgroundInfo, false);
   });

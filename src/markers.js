@@ -4,8 +4,8 @@
 // the rest of a turn's life, so the monitor can know what the session is doing without
 // scraping the screen:
 //
-//   stop      Stop: the turn ended. Carries how much background work is still in flight
-//             (background_tasks) and how many session crons will wake the session later
+//   stop      Stop: the turn ended. Carries how many background agents are still in flight
+//             (background_tasks, minus long-lived monitors and shells) and how many session crons will wake the session later
 //             (session_crons), plus the tail of the last assistant message.
 //   prompt    UserPromptSubmit: a turn started (typed by a person or sent by us).
 //   notify    Notification: permission prompts, idle prompts, quota auto-resume events.
@@ -52,6 +52,14 @@ function count(v) {
   return Array.isArray(v) ? v.length : 0;
 }
 
+// Monitors and shells (a dev server, an artifact watch) stay running for the whole session
+// and finish without a Stop, so counting them would keep a session unsettled forever.
+const LONG_LIVED_TASKS = new Set(['monitor', 'shell']);
+
+function pendingWork(tasks) {
+  return Array.isArray(tasks) ? tasks.filter((t) => !LONG_LIVED_TASKS.has(t?.type)).length : 0;
+}
+
 // The marker body for one hook payload: only what the monitor reads, so a large
 // payload doesn't get copied around every turn.
 export function markerFromHook(kind, payload = {}, now = Date.now()) {
@@ -61,7 +69,7 @@ export function markerFromHook(kind, payload = {}, now = Date.now()) {
       const last = typeof payload.last_assistant_message === 'string' ? payload.last_assistant_message : '';
       return {
         ...base,
-        background: count(payload.background_tasks),
+        background: pendingWork(payload.background_tasks),
         crons: count(payload.session_crons),
         // Absent on older Claude Code builds. null means "unknown", not "none".
         hasBackgroundInfo: Array.isArray(payload.background_tasks),

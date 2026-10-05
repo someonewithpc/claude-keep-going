@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A background monitor or shell no longer stops compaction for good.** A session with an
+  artifact watch or a dev server running reported one background task on every `Stop`, so it
+  never counted as settled and idle compaction never fired. They are no longer counted.
+
 ## [0.14.2] - 2026-10-03
 
 ### Changed

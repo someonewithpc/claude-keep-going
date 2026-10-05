@@ -489,7 +489,7 @@ stands, so it doesn't have to read that off the screen:
 
 | Hook | Marker | What the monitor learns |
 |---|---|---|
-| `Stop` | `stop` | The turn ended, how many background agents and tasks are still running, whether a scheduled wakeup is pending, and the end of the last message |
+| `Stop` | `stop` | The turn ended, how many background agents are still running, whether a scheduled wakeup is pending, and the end of the last message |
 | `UserPromptSubmit` | `prompt` | A turn started, and who started it |
 | `Notification` | `notify` | A permission prompt is open, or Claude Code's own auto-continue fired or gave up |
 | `PostCompact` | `compact` | A compaction finished |
