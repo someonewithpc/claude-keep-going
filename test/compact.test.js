@@ -87,11 +87,18 @@ describe('compactTick', () => {
     assert.deepEqual(io.sent, []);
   });
 
-  it('waits while background agents or scheduled wakeups are pending', async () => {
-    for (const stop of [{ ...settledStop(), background: 2 }, { ...settledStop(), crons: 1 }, { ...settledStop(), hasBackgroundInfo: false }]) {
+  it('waits while scheduled wakeups are pending or hook info is missing', async () => {
+    for (const stop of [{ ...settledStop(), crons: 1 }, { ...settledStop(), hasBackgroundInfo: false }]) {
       const io = fakeIo({ markers: { stop, request: { ts: NOW - 2 * MIN, action: 'compact' } }, snapshot: warm(MIN / 2) });
       assert.equal(await compactTick(createCompactState(), io, cfg(), NOW), null);
     }
+  });
+
+  it('ignores running background agents when waitForAgents is off', async () => {
+    const stop = { ...settledStop(), background: 2 };
+    const run = (c) => compactTick(createCompactState(), fakeIo({ markers: { stop, request: { ts: NOW - 2 * MIN, action: 'compact' } }, snapshot: warm(MIN / 2) }), cfg(c), NOW);
+    assert.equal(await run({}), null);
+    assert.notEqual(await run({ waitForAgents: false }), null);
   });
 
   it('waits while a permission prompt is open', async () => {

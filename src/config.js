@@ -139,6 +139,8 @@ export const DEFAULT_COMPACT = {
   matchLastMessage: false,
   confirmMinutes: 5,
   minIntervalMinutes: 30,
+  // Hold off while background agents are still running.
+  waitForAgents: true,
 };
 
 // Claude Code's own usage-limit auto-continue (setting autoContinueAtUsageLimit, behind
@@ -281,6 +283,7 @@ function validateCompact(raw) {
   };
   b.focus = typeof b.focus === 'string' ? b.focus : d.focus;
   b.matchLastMessage = typeof b.matchLastMessage === 'boolean' ? b.matchLastMessage : d.matchLastMessage;
+  b.waitForAgents = typeof b.waitForAgents === 'boolean' ? b.waitForAgents : d.waitForAgents;
   b.confirmMinutes = validNumber(b.confirmMinutes, 1, d.confirmMinutes);
   b.minIntervalMinutes = validNumber(b.minIntervalMinutes, 0, d.minIntervalMinutes);
   return b;

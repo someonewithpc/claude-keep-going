@@ -528,7 +528,7 @@ the prompt cache has expired, and the first message re-sends the whole context c
 With `compact.enabled`, the monitor sends `/compact` itself when all of these hold:
 
 - the last turn ended (`Stop` hook) and no new one started
-- no background agents or tasks are still running, and no scheduled wakeup is pending
+- no background agents are still running (unless `waitForAgents` is `false`), and no scheduled wakeup is pending
 - no permission prompt is open
 - something asked for it (see `trigger` below)
 - the time window and the away check pass, if you set them
@@ -568,6 +568,7 @@ fixed number of minutes after the turn.
 | `focus` | `""` | Text appended to `/compact`, telling the summary what to keep. |
 | `matchLastMessage` | `false` | Also act when the last message mentions `/compact`, for sessions that ask a person instead of using `request`. |
 | `minIntervalMinutes` | `30` | Never compact twice within this long. |
+| `waitForAgents` | `true` | Hold off while background agents are running. Set `false` to compact a session that always has an agent running. |
 | `confirmMinutes` | `5` | How long to wait for the `PostCompact` hook before logging that the compaction didn't confirm. |
 
 The session asks with a command it can run through its Bash tool:

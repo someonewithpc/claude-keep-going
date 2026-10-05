@@ -105,7 +105,7 @@ export async function compactTick(cs, io, config, now = Date.now()) {
   if (turnState({ stop, prompt }) !== 'idle') { cs.idleSince = null; return null; }
   if (cs.idleSince !== stop.ts) { cs.idleSince = stop.ts; cs.fireAt = null; }
   if (cs.handledStop === stop.ts) return null;
-  if (!isSettled(stop)) return null;
+  if (!isSettled(stop, { waitForAgents: c.waitForAgents })) return null;
 
   const notify = await io.readMarker('notify');
   if (notify && notify.ts > stop.ts && notify.type === 'permission_prompt') return null;

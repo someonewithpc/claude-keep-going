@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **New `compact.waitForAgents` setting** (default `true`, the existing behavior). Set it to
+  `false` to compact while background agents are running. A scheduled wakeup still blocks.
+
 ### Fixed
 - **A background monitor or shell no longer stops compaction for good.** A session with an
   artifact watch or a dev server running reported one background task on every `Stop`, so it

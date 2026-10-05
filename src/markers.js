@@ -143,7 +143,7 @@ export function turnState({ stop, prompt } = {}) {
 
 // Idle and nothing will wake the session on its own: no background agents or tasks
 // still running, no scheduled wakeups. False when the Stop payload had no such fields.
-export function isSettled(stopMarker) {
+export function isSettled(stopMarker, { waitForAgents = true } = {}) {
   return !!stopMarker && stopMarker.hasBackgroundInfo === true
-    && stopMarker.background === 0 && stopMarker.crons === 0;
+    && (!waitForAgents || stopMarker.background === 0) && stopMarker.crons === 0;
 }
