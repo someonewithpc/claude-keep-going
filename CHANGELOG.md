@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Compaction fires 5 minutes before the cache expires** (`compact.settle.marginSeconds`
+  is 300, was 60). One minute was easy to miss when a draft was in the way.
 - **New `compact.waitForAgents` setting** (default `true`, the existing behavior). Set it to
   `false` to compact while background agents are running. A scheduled wakeup still blocks.
 

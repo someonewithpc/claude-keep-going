@@ -547,7 +547,7 @@ fixed number of minutes after the turn.
     "window": { "start": "01:00", "end": "07:00" },
     "awayMinutes": 30,
     "minContextPercent": 40,
-    "settle": { "mode": "before-expiry", "marginSeconds": 60 },
+    "settle": { "mode": "before-expiry", "marginSeconds": 300 },
     "focus": "",
     "matchLastMessage": false
   }
@@ -563,7 +563,7 @@ fixed number of minutes after the turn.
 | `minContextPercent` | `40` | Threshold for the `policy` trigger. |
 | `minContextTokens` | `null` | Also require this many tokens in the prompt for the `policy` trigger. |
 | `settle.mode` | `"before-expiry"` | `before-expiry` fires `settle.marginSeconds` before the cache expires, or `settle.minutes` after the turn when the expiry is unknown. `fixed` always fires `settle.minutes` after the turn ends: 4 suits the 5-minute cache, 55 the 1-hour one. |
-| `settle.marginSeconds` | `60` | How long before the cache expires to fire. |
+| `settle.marginSeconds` | `300` | How long before the cache expires to fire. If the cache has less than that left, it fires as soon as the turn settles. |
 | `settle.minutes` | `4` | Delay after the turn for `fixed`, and the fallback for `before-expiry`. |
 | `focus` | `""` | Text appended to `/compact`, telling the summary what to keep. |
 | `matchLastMessage` | `false` | Also act when the last message mentions `/compact`, for sessions that ask a person instead of using `request`. |

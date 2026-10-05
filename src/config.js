@@ -133,7 +133,7 @@ export const DEFAULT_COMPACT = {
   minContextTokens: null,
   // before-expiry: marginSeconds before the statusline's prompt_cache.expires_at, falling
   // back to 4 minutes after the turn when that is unknown. fixed: minutes after the turn.
-  settle: { mode: 'before-expiry', marginSeconds: 60, minutes: 4 },
+  settle: { mode: 'before-expiry', marginSeconds: 300, minutes: 4 },
   focus: '',
   // Also act when the last message mentions /compact (a model asking a person to run it).
   matchLastMessage: false,

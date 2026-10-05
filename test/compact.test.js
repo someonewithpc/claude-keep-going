@@ -40,16 +40,16 @@ describe('compactTick', () => {
     assert.equal(await compactTick(createCompactState(), io, cfg({ enabled: false }), NOW), null);
   });
 
-  it('waits until a minute before the cache expires, then sends /compact once', async () => {
+  it('waits until five minutes before the cache expires, then sends /compact once', async () => {
     const cs = createCompactState();
     const io = fakeIo({ markers: { stop: settledStop(), request: { ts: NOW - 2 * MIN, action: 'compact', focus: 'keep the TODO list' } }, snapshot: warm(30 * MIN) });
     assert.equal(await compactTick(cs, io, cfg(), NOW), 'compact-scheduled');
-    assert.equal(cs.fireAt, NOW + 29 * MIN);
+    assert.equal(cs.fireAt, NOW + 25 * MIN);
     assert.equal(await compactTick(cs, io, cfg(), NOW + MIN), null);
-    assert.equal(await compactTick(cs, io, cfg(), NOW + 29 * MIN), 'compact-sent');
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 25 * MIN), 'compact-sent');
     assert.deepEqual(io.sent, ['/compact keep the TODO list']);
     assert.deepEqual(io.cleared, ['request']);
-    assert.equal(await compactTick(cs, io, cfg(), NOW + 29 * MIN + 1000), null);
+    assert.equal(await compactTick(cs, io, cfg(), NOW + 25 * MIN + 1000), null);
     assert.equal(io.sent.length, 1);
   });
 
@@ -227,7 +227,7 @@ describe('compact config', () => {
     assert.equal(c.enabled, true);
     assert.equal(c.trigger, 'request');
     assert.equal(c.window, null);
-    assert.deepEqual(c.settle, { mode: 'fixed', marginSeconds: 60, minutes: 55 });
+    assert.deepEqual(c.settle, { mode: 'fixed', marginSeconds: 300, minutes: 55 });
   });
 });
 
